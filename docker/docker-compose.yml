@@ -1,0 +1,31 @@
+# docker-compose.yml - Easy way to build and run the desktop container
+# =====================================================================
+#
+# USAGE:
+#   docker-compose up --build     # Build and start
+#   docker-compose down           # Stop and remove
+#
+# Then connect VNC viewer to: localhost:5900
+
+services:
+  desktop:
+    build: . # Build from Dockerfile in this directory
+    container_name: deskpilot-desktop
+
+    ports:
+      - "5900:5900" # VNC: localhost:5900 → container:5900
+      - "6080:6080" # noVNC: http://localhost:6080 → browser access
+
+    # Mount the source code into the container
+    # This lets Python inside Docker import our execution code
+    volumes:
+      - ../src:/app/src:ro # Read-only mount of source
+
+    # Keep container running even if processes restart
+    restart: unless-stopped
+
+    # Container resource limits (optional, adjust as needed)
+    deploy:
+      resources:
+        limits:
+          memory: 2G # Max 2GB RAM

@@ -6,4 +6,8 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.12.5",
+    "google-generativeai",
+    "pyyaml",
+    "pillow",
+    "pyautogui",
 ]

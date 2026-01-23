@@ -1,0 +1,3 @@
+name: "Test Task"
+description: "A simple test task to verify the agent."
+max_steps: 5

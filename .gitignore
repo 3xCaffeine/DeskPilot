@@ -10,3 +10,7 @@ wheels/
 .venv
 
 *.txt
+
+#test files
+/scripts
+debug_screenshot.png

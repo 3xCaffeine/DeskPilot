@@ -11,6 +11,4 @@ wheels/
 
 .env
 
-*.txt
-
 /docs

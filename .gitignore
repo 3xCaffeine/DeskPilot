@@ -12,3 +12,5 @@ wheels/
 .env
 
 /docs
+/runs
+src/cua_backend/test_runs

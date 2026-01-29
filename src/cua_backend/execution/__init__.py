@@ -12,11 +12,12 @@ USAGE:
 """
 
 from .executor import Executor, ExecutionResult
-from .desktop_controller import DesktopController, create_controller
+from .desktop_controller import DesktopController, create_controller, WindowInfo
 
 __all__ = [
     "Executor",
     "ExecutionResult", 
     "DesktopController",
     "create_controller",
+    "WindowInfo",
 ]

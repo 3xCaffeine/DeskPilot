@@ -9,8 +9,8 @@ wheels/
 # Virtual environments
 .venv
 
-*.txt
+.env
 
-#test files
-/scripts
-debug_screenshot.png
+/docs
+/runs
+src/cua_backend/test_runs

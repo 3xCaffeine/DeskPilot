@@ -17,7 +17,13 @@ ENV DEBIAN_FRONTEND=noninteractive
 # ─────────────────────────────────────────────────────────────
 # STEP 1: Install system packages
 # ─────────────────────────────────────────────────────────────
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y software-properties-common \
+    && add-apt-repository -y ppa:mozillateam/ppa \
+    && echo 'Package: *' > /etc/apt/preferences.d/mozilla-firefox \
+    && echo 'Pin: release o=LP-PPA-mozillateam' >> /etc/apt/preferences.d/mozilla-firefox \
+    && echo 'Pin-Priority: 1001' >> /etc/apt/preferences.d/mozilla-firefox \
+    && echo 'Unattended-Upgrade::Allowed-Origins:: "LP-PPA-mozillateam:${distro_codename}";' > /etc/apt/apt.conf.d/51unattended-upgrades-firefox \
+    && apt-get update && apt-get install -y \
     # --- Desktop environment ---
     xfce4 \
     xfce4-terminal \
@@ -40,6 +46,10 @@ RUN apt-get update && apt-get install -y \
     python3-dev \
     scrot \
     gnome-screenshot \
+    # --- Accessibility + OCR tools ---
+    xdotool \
+    wmctrl \
+    tesseract-ocr \
     # --- Clean up ---
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -55,7 +65,11 @@ RUN pip3 install --no-cache-dir \
     pillow \
     python-xlib \
     pyscreeze \
-    pydantic
+    pydantic \
+    dspy \
+    google-genai \
+    litellm \
+    pytesseract
 
 # ─────────────────────────────────────────────────────────────
 # STEP 3: Configure the environment

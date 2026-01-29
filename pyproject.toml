@@ -10,4 +10,6 @@ dependencies = [
     "pyyaml",
     "pillow",
     "pyautogui",
+    "dspy",
+    "litellm",
 ]

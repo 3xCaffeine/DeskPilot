@@ -14,9 +14,24 @@ Tomorrow we could swap this for a Windows controller or a web controller.
 
 from __future__ import annotations
 
+import subprocess
 import time
-from typing import Optional
+from dataclasses import dataclass
+from typing import Optional, List
 from PIL import Image
+
+
+# ─────────────────────────────────────────────────────────────
+# DATA STRUCTURES FOR STATE READING
+# ─────────────────────────────────────────────────────────────
+
+@dataclass
+class WindowInfo:
+    """Information about a window from xdotool/wmctrl."""
+    window_id: str
+    title: str
+    app_name: str = ""
+    is_active: bool = False
 
 from .executor import Executor, ExecutionResult
 from .actions import (
@@ -156,6 +171,105 @@ class DesktopController(Executor):
     def _handle_wait(self, action: WaitAction) -> None:
         """Handle WAIT action."""
         wait(action.seconds)
+
+    # ─────────────────────────────────────────────────────────────
+    # ACCESSIBILITY STATE READING (Phase 1)
+    # These methods read desktop state WITHOUT using vision
+    # ─────────────────────────────────────────────────────────────
+
+    def get_active_window(self) -> Optional[WindowInfo]:
+        """
+        Get information about the currently focused window.
+        Uses xdotool to query the active window.
+        
+        Returns:
+            WindowInfo with window_id, title, app_name, or None if failed
+        """
+        try:
+            # Get active window ID
+            result = subprocess.run(
+                ["xdotool", "getactivewindow"],
+                capture_output=True, text=True, timeout=2
+            )
+            if result.returncode != 0:
+                return None
+            
+            window_id = result.stdout.strip()
+            
+            # Get window title
+            title_result = subprocess.run(
+                ["xdotool", "getwindowname", window_id],
+                capture_output=True, text=True, timeout=2
+            )
+            title = title_result.stdout.strip() if title_result.returncode == 0 else ""
+            
+            # Get window class (app name)
+            class_result = subprocess.run(
+                ["xdotool", "getwindowclassname", window_id],
+                capture_output=True, text=True, timeout=2
+            )
+            app_name = class_result.stdout.strip() if class_result.returncode == 0 else ""
+            
+            return WindowInfo(
+                window_id=window_id,
+                title=title,
+                app_name=app_name,
+                is_active=True
+            )
+        except Exception:
+            return None
+
+    def get_window_list(self) -> List[WindowInfo]:
+        """
+        Get list of all open windows.
+        Uses wmctrl to enumerate windows.
+        
+        Returns:
+            List of WindowInfo objects for each open window
+        """
+        windows = []
+        try:
+            # wmctrl -l: list windows with format "ID DESKTOP HOST TITLE"
+            result = subprocess.run(
+                ["wmctrl", "-l"],
+                capture_output=True, text=True, timeout=2
+            )
+            if result.returncode != 0:
+                return windows
+            
+            # Get active window for comparison
+            active = self.get_active_window()
+            active_id = active.window_id if active else ""
+            
+            for line in result.stdout.strip().split("\n"):
+                if not line.strip():
+                    continue
+                parts = line.split(None, 3)  # Split into max 4 parts
+                if len(parts) >= 4:
+                    wid = parts[0]
+                    title = parts[3]
+                    windows.append(WindowInfo(
+                        window_id=wid,
+                        title=title,
+                        is_active=(wid == active_id)
+                    ))
+                    
+        except Exception:
+            pass
+        
+        return windows
+
+    def get_text_state(self):
+        """
+        Collect all text-based state for the OBSERVE phase.
+        Returns a dict compatible with PlannerInput.text_state.
+        """
+        active = self.get_active_window()
+        return {
+            "active_app": active.app_name if active else "",
+            "window_title": active.title if active else "",
+            "focused_element": "",  # TODO: implement AT-SPI query
+        }
 
 
 # ─────────────────────────────────────────────────────────────

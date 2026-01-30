@@ -13,4 +13,4 @@ wheels/
 
 /docs
 /runs
-src/cua_backend/test_runs
+/.vscode

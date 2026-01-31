@@ -34,12 +34,12 @@ class PlannerInput:
     """Everything the planner needs to decide next action."""
     goal: str
     step: int
-    last_action: str = ""
-    last_action_ok: bool = True
-    verification_passed: bool = True
+    history: List[str] = None # List of [Action: Result] strings
     text_state: TextState = None
     
     def __post_init__(self):
+        if self.history is None:
+            self.history = []
         if self.text_state is None:
             self.text_state = TextState()
 
@@ -49,6 +49,8 @@ class PlannerOutput:
     """Structured decision from the planner."""
     action_type: Literal["PRESS_KEY", "TYPE", "WAIT", "DONE", "FAIL", "CLICK"]
     action_param: str = ""  # key name, text to type, or seconds
+    expected_window_title: str = "" # Anchor for local verification
+    success_indicators: str = "" # Comma-separated success markers
     reason: str = ""
     needs_vision: bool = False
     confidence: float = 0.8
@@ -70,18 +72,22 @@ class PlanNextAction(dspy.Signature):
     1. Output a SEMICOLON-SEPARATED sequence of actions to save LLM calls.
     2. Example sequence: PRESS_KEY(Alt+F2); WAIT(1); TYPE(firefox); PRESS_KEY(ENTER)
     3. If the goal is reached, use the DONE action.
+    4. REPETITION POLICY: If history shows you've tried an action before and it failed or didn't show success markers, DO NOT REPEAT IT. Instead, use an investigation action like 'ls' or 'SCROLL' or 'WAIT'.
     """
     
     # Inputs
     goal: str = dspy.InputField(desc="The task goal to achieve")
+    app_knowledge: str = dspy.InputField(desc="Knowledge base of app names and titles")
+    history: str = dspy.InputField(desc="String representation of previous actions and their outcomes")
     step: int = dspy.InputField(desc="Current step number (1-indexed)")
-    last_action: str = dspy.InputField(desc="Previous action taken")
     window_title: str = dspy.InputField(desc="Current window title (via xdotool)")
     active_app: str = dspy.InputField(desc="Currently focused application")
     
     # Outputs
-    action_sequence: str = dspy.OutputField(desc="One or more actions separated by ; (e.g., PRESS_KEY(Alt+F2); WAIT(1); TYPE(firefox); PRESS_KEY(ENTER))")
-    reason: str = dspy.OutputField(desc="Reasoning for this specific sequence")
+    action_sequence: str = dspy.OutputField(desc="Sequence of actions (e.g., PRESS_KEY(Alt+F2); WAIT(1); TYPE(firefox); PRESS_KEY(ENTER))")
+    expected_window_title: str = dspy.OutputField(desc="The window title expected after this sequence (e.g., 'Mozilla Firefox' or 'Terminal')")
+    success_indicators: str = dspy.OutputField(desc="Comma-separated text strings that prove goal is reached (e.g., '$, #, Google Search')")
+    reason: str = dspy.OutputField(desc="Reasoning for this sequence")
     needs_vision: bool = dspy.OutputField(desc="Set to True ONLY if text signals are insufficient")
 
 
@@ -97,22 +103,42 @@ class ActionPlanner(dspy.Module):
     def __init__(self):
         super().__init__()
         self.planner = dspy.ChainOfThought(PlanNextAction)
+        self.knowledge = self._load_knowledge()
+
+    def _load_knowledge(self) -> str:
+        try:
+            import yaml
+            import os
+            from pathlib import Path
+            path = Path("configs/xfce_apps.yaml")
+            if path.exists():
+                with open(path, "r") as f:
+                    return str(yaml.safe_load(f))
+            return "No app knowledge available."
+        except:
+            return "No app knowledge available."
     
     def forward(self, inp: PlannerInput) -> PlannerOutput:
         """Run the planner and return a sequence-aware output."""
+        # Convert history list to string for dspy
+        history_str = "\n".join(inp.history) if inp.history else "none"
+        
         result = self.planner(
             goal=inp.goal,
+            app_knowledge=self.knowledge,
+            history=history_str,
             step=inp.step,
-            last_action=inp.last_action or "none",
             window_title=inp.text_state.window_title or "unknown",
             active_app=inp.text_state.active_app or "unknown",
         )
         
         return PlannerOutput(
-            action_type="SEQUENCE", # Marker for multi-action
+            action_type="SEQUENCE",
             action_param=result.action_sequence,
+            expected_window_title=result.expected_window_title,
+            success_indicators=getattr(result, 'success_indicators', ""),
             reason=result.reason,
-            needs_vision=result.needs_vision if hasattr(result, 'needs_vision') else False,
+            needs_vision=getattr(result, 'needs_vision', False),
         )
 
 

@@ -30,11 +30,3 @@ def check_text_exists(image: Image.Image, keywords: List[str]) -> bool:
             return True
     return False
 
-def contains_goal_indicators(image: Image.Image, goal: str) -> bool:
-    """
-    Smart check: Does the screen contain words from the goal?
-    (e.g., if goal is 'search google', check for 'Google')
-    """
-    # Simply extract significant words from goal
-    words = [w.strip(",.?!") for w in goal.split() if len(w) > 3]
-    return check_text_exists(image, words)

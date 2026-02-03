@@ -1,0 +1,27 @@
+# xfce_apps.yaml - Knowledge Base for XFCE Applications
+# Maps common names to exact binary names and expected window titles
+
+terminal:
+  bin: "xfce4-terminal"
+  title: "Terminal"
+  indicators: ["$", "#"]
+
+browser:
+  bin: "firefox"
+  title: "Mozilla Firefox"
+  indicators: ["Google", "http"]
+
+editor:
+  bin: "gedit"
+  title: "Text Editor"
+  indicators: ["Save", "Open"]
+
+file_manager:
+  bin: "thunar"
+  title: "File Manager"
+  indicators: ["Documents", "Downloads"]
+
+application_finder:
+  bin: "xfce4-appfinder"
+  title: "Application Finder"
+  indicators: ["Search"]

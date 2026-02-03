@@ -59,20 +59,22 @@ class Agent:
                 screenshot.save(ss_path)
                 
                 # === 0. CHECK COMPLETION (Locally) ===
-                # If we have an expected title from the PREVIOUS decision, check it now
                 current_state = self._executor.get_text_state()
                 current_title = current_state.get("window_title", "").lower()
                 
-                # We check for completion ONLY if we have markers to look for
-                if last_expected_title and last_expected_title.lower() in current_title:
+                # INTERMEDIATE GUARD: Don't auto-finish on search engines if we are deep-diving
+                is_search_engine = any(s in current_title for s in ["google", "bing", "search"])
+                
+                # We check for completion ONLY if we have markers to look for AND NOT on a search engine
+                if not is_search_engine and last_expected_title and last_expected_title.lower() in current_title:
                     from ..perception.ocr import get_text_from_image
                     page_text = get_text_from_image(screenshot).lower()
                     
                     # Parse indicators string to list
                     markers = [m.strip() for m in success_markers.split(",")] if success_markers else []
                     
-                    # If markers exist on screen OR if no markers required, we are truly DONE
-                    if not markers or any(m.lower() in page_text for m in markers):
+                    # If markers exist on screen, we are truly DONE
+                    if markers and any(m.lower() in page_text for m in markers):
                         msg = f"Goal reached (Verified: Title='{last_expected_title}', Content={success_markers})"
                         done = DoneAction(final_answer=msg, reason="Anchor + Indicator Match")
                         self._record(state, step, done, True, ss_path)
@@ -82,9 +84,13 @@ class Agent:
                 text_state = TextState(**self._executor.get_text_state())
 
                 # === 2. DECIDE (Multi-step sequence from 1 LLM call) ===
-                actions, expected_title, indicators = self._decide_sequence(task.goal, step, self._history, text_state)
+                actions, expected_title, indicators, sub_goals = self._decide_sequence(task.goal, step, self._history, text_state)
                 last_expected_title = expected_title
                 success_markers = indicators
+                
+                # Tracking sub-goals in history for the AI
+                if sub_goals:
+                    self._history.append(f"Checklist: {sub_goals}")
 
                 # === 3. EXECUTE & VALIDATE (Retry loop) ===
                 for attempt in range(2): # Up to 2 retries locally
@@ -116,27 +122,31 @@ class Agent:
                         time.sleep(1)
                     
                     if anchor_found:
-                        # Success marker check (Soft check)
-                        from ..perception.ocr import get_text_from_image
-                        page_text = get_text_from_image(screenshot).lower()
+                        # Step sequence worked (Anchor matched)
+                        is_search_engine = any(s in current_title for s in ["google", "bing", "search"])
                         
-                        markers = [m.strip() for m in success_markers.split(",")] if success_markers else []
+                        if not is_search_engine:
+                            # Potential Full Completion (Soft check)
+                            from ..perception.ocr import get_text_from_image
+                            page_text = get_text_from_image(screenshot).lower()
+                            markers = [m.strip() for m in success_markers.split(",")] if success_markers else []
+                            
+                            if markers and any(m.lower() in page_text for m in markers):
+                                self._history.append(f"Step {step}: {actions} -> SUCCESS (Goal Indicators found)")
+                                verified = True
+                                break 
                         
-                        if not markers or any(m.lower() in page_text for m in markers):
-                            self._history.append(f"Step {step}: {actions} -> SUCCESS")
-                            verified = True
-                            break 
-                        else:
-                            # UNCERTAIN: Anchor match but no indicator (e.g. silent terminal)
-                            self._history.append(f"Step {step}: {actions} -> UNCERTAIN (Anchor match, but indicators missing)")
-                            verified = True # Allow next sequence without retry
-                            break
+                        # If we get here, it's either a search engine OR anchor matched but no markers found.
+                        # Either way, the SEQUENCE worked, so we don't retry.
+                        self._history.append(f"Step {step}: {actions} -> STEP SUCCESS (Anchor matched: '{current_title}')")
+                        verified = True
+                        break
                     else:
                         # Hard Mismatch (Retry sequence)
                         print(f"⚠️ Anchor mismatch: Expected '{expected_title}', got '{current_title}'")
                         self._history.append(f"Step {step}: {actions} -> FAIL (Anchor mismatch)")
                         verified = False
-                        # If retrying, we'll just continue the attempt loop
+                        self._executor.execute(WaitAction(seconds=1.5))
 
                 # === 4. ESCALATE (Vision fallback if LOCAL retries failed) ===
                 if not verified and self._vision:
@@ -169,11 +179,11 @@ class Agent:
                           error="Max steps reached", run_id=task.run_id)
 
     def _decide_sequence(self, goal: str, step: int, history: List[str],
-                        text_state: TextState) -> tuple[List[Action], str, str]:
-        """DECIDE phase: Get a sequence of actions, expected title, and success markers."""
+                        text_state: TextState) -> tuple[List[Action], str, str, str]:
+        """DECIDE phase: Get a sequence of actions, expected title, success markers, and sub_goals."""
         inp = PlannerInput(goal=goal, step=step, history=history, text_state=text_state)
         output = self._planner.decide(inp)
-        return parse_actions(output), output.expected_window_title, output.success_indicators
+        return parse_actions(output), output.expected_window_title, output.success_indicators, output.sub_goals
 
 
     def _escalate(self, screenshot: Image.Image, goal: str, step: int, 

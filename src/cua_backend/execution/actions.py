@@ -76,6 +76,59 @@ def type_text(text: str, interval: float = 0.02) -> None:
     pyautogui.typewrite(text, interval=interval)
 
 
+# Key name mapping: X11/LLM names → PyAutoGUI names
+KEY_NAME_MAP = {
+    # Super/Windows key
+    "super_l": "win",
+    "super_r": "win",
+    "super": "win",
+    "meta": "win",
+    "meta_l": "win",
+    "meta_r": "win",
+    "win": "win",
+    "winleft": "win",
+    "winright": "win",
+    # Control
+    "control": "ctrl",
+    "control_l": "ctrl",
+    "control_r": "ctrl",
+    "ctrl": "ctrl",
+    # Alt
+    "alt_l": "alt",
+    "alt_r": "alt",
+    "alt": "alt",
+    # Shift
+    "shift_l": "shift",
+    "shift_r": "shift",
+    "shift": "shift",
+    # Return/Enter
+    "return": "enter",
+    "enter": "enter",
+    # Escape
+    "escape": "esc",
+    "esc": "esc",
+    # Navigation
+    "page_up": "pageup",
+    "page_down": "pagedown",
+    "pageup": "pageup",
+    "pagedown": "pagedown",
+    # Delete/Backspace
+    "delete": "delete",
+    "backspace": "backspace",
+    "back": "backspace",
+}
+
+
+def normalize_key(key: str) -> str:
+    """
+    Normalize a key name to PyAutoGUI format.
+    
+    Maps X11 names (Super_L, Control) to PyAutoGUI names (win, ctrl).
+    """
+    key_lower = key.lower().strip()
+    return KEY_NAME_MAP.get(key_lower, key_lower)
+
+
 def press_key(key: str) -> None:
     """
     Press a special key or key combination.
@@ -85,17 +138,20 @@ def press_key(key: str) -> None:
         press_key("tab")          # Press Tab
         press_key("ctrl+a")       # Select all (Ctrl+A)
         press_key("ctrl+shift+t") # Reopen closed tab
+        press_key("Super_L")      # Windows/Super key (normalized to 'win')
     
     HOW COMBINATIONS WORK:
     We split on "+" and use hotkey() for multiple keys.
+    Key names are normalized (Super_L → win, Control → ctrl).
     """
     if "+" in key:
-        # It's a combo like "ctrl+c"
-        keys = [k.strip().lower() for k in key.split("+")]
+        # It's a combo like "ctrl+c" or "Control+L"
+        keys = [normalize_key(k) for k in key.split("+")]
         pyautogui.hotkey(*keys)
     else:
         # Single key
-        pyautogui.press(key.lower())
+        normalized = normalize_key(key)
+        pyautogui.press(normalized)
 
 
 def scroll(amount: int) -> None:
@@ -134,9 +190,33 @@ def screenshot() -> Image.Image:
         PIL Image object of the screenshot
         
     HOW IT WORKS:
-    PyAutoGUI uses 'scrot' on Linux to capture the screen.
-    scrot reads from the DISPLAY env variable.
+    Uses scrot directly on Linux (more reliable than PyAutoGUI's pyscreeze).
+    Falls back to PyAutoGUI on other platforms.
     """
+    import subprocess
+    import tempfile
+    import os
+    
+    # Try scrot first (Linux/Docker)
+    try:
+        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
+            tmp_path = f.name
+        
+        result = subprocess.run(
+            ['scrot', '-o', tmp_path],
+            capture_output=True,
+            timeout=5,
+        )
+        
+        if result.returncode == 0 and os.path.exists(tmp_path):
+            img = Image.open(tmp_path)
+            img.load()  # Load into memory
+            os.unlink(tmp_path)  # Delete temp file
+            return img
+    except (subprocess.SubprocessError, FileNotFoundError, OSError):
+        pass  # Fall through to PyAutoGUI
+    
+    # Fallback to PyAutoGUI
     return pyautogui.screenshot()
 
 

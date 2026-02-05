@@ -1,5 +1,77 @@
 # Computer Use Agent - Complete Repository Structure
 
+## Quick Docker Commands
+
+### Build & Start
+```bash
+# Build the Docker image
+docker-compose -f docker/docker-compose.yml build
+
+# Start container in background
+docker-compose -f docker/docker-compose.yml up -d
+
+# View logs
+docker-compose -f docker/docker-compose.yml logs -f
+```
+
+### Access Container
+```bash
+# Enter container shell
+docker exec -it deskpilot-desktop bash
+
+# Start Chrome with CDP
+DISPLAY=:99 /usr/local/bin/chrome-with-cdp &
+
+# Run tests
+python3 test_phase4.py
+```
+
+### Container Management
+```bash
+# Stop container
+docker-compose -f docker/docker-compose.yml down
+
+# Restart container
+docker-compose -f docker/docker-compose.yml restart
+
+# Remove container and volumes
+docker-compose -f docker/docker-compose.yml down -v
+
+# View running containers
+docker ps
+
+# Check container resource usage
+docker stats deskpilot-desktop
+```
+
+### VNC Access
+```bash
+# Access desktop via browser
+# URL: http://localhost:6080/vnc.html
+
+# Or use VNC client on port 5900
+# Connection: localhost:5900
+```
+
+### Debugging
+```bash
+# Check if Chrome is running
+docker exec -it deskpilot-desktop bash -c "ps aux | grep chrome"
+
+# Test CDP connection
+docker exec -it deskpilot-desktop bash -c "curl http://127.0.0.1:9222/json"
+
+# View Chrome wrapper script
+docker exec -it deskpilot-desktop bash -c "cat /usr/local/bin/chrome-with-cdp"
+
+# Check environment variables
+docker exec -it deskpilot-desktop bash -c "env | grep DISPLAY"
+```
+
+---
+
+## Repository Structure
+
 ```
 computer-use-agent/
 │

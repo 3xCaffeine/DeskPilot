@@ -13,4 +13,5 @@ dependencies = [
     "dspy",
     "litellm",
     "playwright>=1.40.0",
+    "nest-asyncio>=1.5.0",
 ]

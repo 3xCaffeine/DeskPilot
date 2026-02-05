@@ -19,6 +19,7 @@ import time
 from dataclasses import dataclass
 from typing import Optional, List
 from PIL import Image
+import asyncio
 
 
 # ─────────────────────────────────────────────────────────────
@@ -52,6 +53,11 @@ from ..schemas.actions import (
     WaitAction,
     DoneAction,
     FailAction,
+    BrowserNavigateAction,
+    BrowserClickAction,
+    BrowserTypeAction,
+    BrowserSubmitAction,
+    BrowserWaitAction,
 )
 
 
@@ -84,6 +90,10 @@ class DesktopController(Executor):
         """
         if startup_delay > 0:
             time.sleep(startup_delay)
+        
+        # Browser integration (lazy-loaded)
+        self._browser_provider = None
+        self._browser_controller = None
     
     def screenshot(self) -> Image.Image:
         """
@@ -134,6 +144,12 @@ class DesktopController(Executor):
             elif isinstance(action, FailAction):
                 # Agent is signaling failure
                 return ExecutionResult(ok=False, error=action.error)
+            
+            # Browser actions - route to CDP controller
+            elif isinstance(action, (BrowserNavigateAction, BrowserClickAction, 
+                                     BrowserTypeAction, BrowserSubmitAction, 
+                                     BrowserWaitAction)):
+                return self._handle_browser_action(action)
                 
             else:
                 return ExecutionResult(
@@ -171,6 +187,59 @@ class DesktopController(Executor):
     def _handle_wait(self, action: WaitAction) -> None:
         """Handle WAIT action."""
         wait(action.seconds)
+    
+    def _handle_browser_action(self, action: Action) -> ExecutionResult:
+        """Handle browser-specific actions via CDP."""
+        try:
+            # Allow nested event loops for browser actions
+            import nest_asyncio
+            nest_asyncio.apply()
+            result = asyncio.run(self._execute_browser_action(action))
+            return ExecutionResult(
+                ok=result.get("success", False),
+                error=result.get("error")
+            )
+        except Exception as e:
+            return ExecutionResult(ok=False, error=f"Browser action failed: {e}")
+    
+    async def _execute_browser_action(self, action: Action) -> dict:
+        """Execute browser action async."""
+        # Ensure browser connection
+        if not await self._ensure_browser_connected():
+            return {"success": False, "error": "Chrome not connected"}
+        
+        controller = self._browser_controller
+        
+        if isinstance(action, BrowserNavigateAction):
+            return await controller.navigate(action.url)
+        elif isinstance(action, BrowserClickAction):
+            return await controller.click_element(action.selector)
+        elif isinstance(action, BrowserTypeAction):
+            return await controller.type_into_element(action.selector, action.text)
+        elif isinstance(action, BrowserSubmitAction):
+            return await controller.submit_form(action.selector)
+        elif isinstance(action, BrowserWaitAction):
+            return await controller.wait_for_selector(action.selector)
+        
+        return {"success": False, "error": "Unknown browser action"}
+    
+    async def _ensure_browser_connected(self) -> bool:
+        """Ensure browser provider and controller are connected."""
+        if self._browser_controller:
+            return True
+        
+        try:
+            from ..perception.browser_state import BrowserStateProvider
+            from .browser_controller import BrowserController
+            
+            self._browser_provider = BrowserStateProvider()
+            if await self._browser_provider.connect():
+                self._browser_controller = BrowserController(self._browser_provider._page)
+                return True
+        except Exception:
+            pass
+        
+        return False
 
     # ─────────────────────────────────────────────────────────────
     # ACCESSIBILITY STATE READING (Phase 1)
@@ -265,11 +334,48 @@ class DesktopController(Executor):
         Returns a dict compatible with PlannerInput.text_state.
         """
         active = self.get_active_window()
-        return {
+        state = {
             "active_app": active.app_name if active else "",
             "window_title": active.title if active else "",
             "focused_element": "",  # TODO: implement AT-SPI query
         }
+        
+        # Add browser state if Chrome is active
+        if self.is_browser_active():
+            browser_state = self.get_browser_state()
+            if browser_state:
+                state["current_url"] = browser_state.url
+                state["is_browser"] = True
+                if browser_state.focused_element:
+                    state["focused_element"] = str(browser_state.focused_element)
+        
+        return state
+    
+    def is_browser_active(self) -> bool:
+        """Check if Chrome browser is currently active."""
+        active = self.get_active_window()
+        if not active:
+            return False
+        # Check both app_name and window_title for Chrome
+        app = active.app_name.lower() if active.app_name else ""
+        title = active.title.lower() if active.title else ""
+        return "chrome" in app or "chromium" in app or "chrome" in title
+    
+    def get_browser_state(self):
+        """Get current browser state via CDP (sync wrapper)."""
+        try:
+            import nest_asyncio
+            nest_asyncio.apply()
+            return asyncio.run(self._get_browser_state_async())
+        except Exception as e:
+            print(f"Failed to get browser state: {e}")
+            return None
+    
+    async def _get_browser_state_async(self):
+        """Get browser state async."""
+        if not await self._ensure_browser_connected():
+            return None
+        return await self._browser_provider.get_state()
 
 
 # ─────────────────────────────────────────────────────────────

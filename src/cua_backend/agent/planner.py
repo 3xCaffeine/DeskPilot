@@ -13,7 +13,7 @@ DSPy handles:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Literal
+from typing import Optional, Literal, List
 import dspy
 
 
@@ -27,6 +27,8 @@ class TextState:
     active_app: str = ""
     window_title: str = ""
     focused_element: str = ""  # role + label if available
+    current_url: Optional[str] = None  # Browser URL if active
+    is_browser: bool = False  # True if Chrome is active window
     
 
 @dataclass
@@ -207,13 +209,13 @@ class Planner:
 
 import re
 
-def parse_actions(output: PlannerOutput) -> List[Action]:
+def parse_actions(output: PlannerOutput) -> list:
     """
     Parses a sequence string like 'PRESS_KEY(Alt+F2); TYPE(firefox)'
     into a list of Action objects.
     """
     from ..schemas.actions import (
-        PressKeyAction, TypeAction, WaitAction, DoneAction, FailAction, ScrollAction
+        PressKeyAction, TypeAction, WaitAction, DoneAction, FailAction, ScrollAction, Action
     )
     
     actions = []

@@ -61,12 +61,17 @@ class Agent:
                 # === 0. CHECK COMPLETION (Locally) ===
                 current_state = self._executor.get_text_state()
                 current_title = current_state.get("window_title", "").lower()
+                current_url = current_state.get("current_url", "")
+                is_browser = current_state.get("is_browser", False)
+                
+                # Use URL for verification if in browser (more reliable than title)
+                verification_key = current_url if is_browser else current_title
                 
                 # INTERMEDIATE GUARD: Don't auto-finish on search engines if we are deep-diving
-                is_search_engine = any(s in current_title for s in ["google", "bing", "search"])
+                is_search_engine = any(s in verification_key.lower() for s in ["google", "bing", "search"])
                 
                 # We check for completion ONLY if we have markers to look for AND NOT on a search engine
-                if not is_search_engine and last_expected_title and last_expected_title.lower() in current_title:
+                if not is_search_engine and last_expected_title and last_expected_title.lower() in verification_key.lower():
                     from ..perception.ocr import get_text_from_image
                     page_text = get_text_from_image(screenshot).lower()
                     
@@ -75,7 +80,7 @@ class Agent:
                     
                     # If markers exist on screen, we are truly DONE
                     if markers and any(m.lower() in page_text for m in markers):
-                        msg = f"Goal reached (Verified: Title='{last_expected_title}', Content={success_markers})"
+                        msg = f"Goal reached (Verified: {'URL' if is_browser else 'Title'}='{last_expected_title}', Content={success_markers})"
                         done = DoneAction(final_answer=msg, reason="Anchor + Indicator Match")
                         self._record(state, step, done, True, ss_path)
                         state.mark_completed(msg)

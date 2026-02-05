@@ -113,7 +113,8 @@ RUN pip3 install --no-cache-dir \
     google-genai \
     litellm \
     pytesseract \
-    playwright
+    playwright \
+    nest-asyncio
 
 # Install Playwright browsers (Chromium only - we use system Chrome for CDP)
 RUN playwright install-deps chromium

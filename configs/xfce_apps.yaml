@@ -7,9 +7,10 @@ terminal:
   indicators: ["$", "#"]
 
 browser:
-  bin: "firefox"
-  title: "Mozilla Firefox"
-  indicators: ["Google", "http"]
+  bin: "google-chrome"
+  title: "Google Chrome"
+  indicators: ["Google", "http", "https"]
+  cdp_port: 9222  # Chrome DevTools Protocol port
 
 editor:
   bin: "gedit"

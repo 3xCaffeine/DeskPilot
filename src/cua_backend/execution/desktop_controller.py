@@ -156,10 +156,6 @@ class DesktopController(Executor):
         """Handle CLICK action."""
         click(action.x, action.y)
     
-    def _handle_type(self, action: TypeAction) -> None:
-        """Handle TYPE action."""
-        type_text(action.text)
-    
     def _handle_scroll(self, action: ScrollAction) -> None:
         """Handle SCROLL action."""
         scroll(action.amount)
@@ -167,6 +163,10 @@ class DesktopController(Executor):
     def _handle_press_key(self, action: PressKeyAction) -> None:
         """Handle PRESS_KEY action."""
         press_key(action.key)
+    
+    def _handle_type(self, action: TypeAction) -> None:
+        """Handle TYPE action."""
+        type_text(action.text)
     
     def _handle_wait(self, action: WaitAction) -> None:
         """Handle WAIT action."""

@@ -6,6 +6,7 @@ Gives agent "browser vision" - URL, focused elements, forms, etc.
 """
 
 from __future__ import annotations
+import asyncio
 from dataclasses import dataclass
 from typing import Optional, List
 from playwright.async_api import async_playwright, Browser, Page
@@ -35,21 +36,46 @@ class BrowserStateProvider:
         self._browser: Optional[Browser] = None
         self._page: Optional[Page] = None
     
-    async def connect(self) -> bool:
-        """Connect to Chrome via CDP."""
-        try:
-            self._playwright = await async_playwright().start()
-            self._browser = await self._playwright.chromium.connect_over_cdp(self.cdp_url)
-            
-            # Get the first page (active tab)
-            contexts = self._browser.contexts
-            if contexts and contexts[0].pages:
-                self._page = contexts[0].pages[0]
-                return True
-            return False
-        except Exception as e:
-            print(f"CDP connection failed: {e}")
-            return False
+    async def connect(self, retries: int = 5, delay: float = 1.0) -> bool:
+        """
+        Connect to Chrome via CDP with retry logic.
+        
+        Args:
+            retries: Number of connection attempts
+            delay: Initial delay between retries (doubles each time)
+        """
+        last_error = None
+        
+        for attempt in range(retries):
+            try:
+                self._playwright = await async_playwright().start()
+                self._browser = await self._playwright.chromium.connect_over_cdp(self.cdp_url)
+                
+                # Get the first page (active tab)
+                contexts = self._browser.contexts
+                if contexts and contexts[0].pages:
+                    self._page = contexts[0].pages[0]
+                    print(f"✅ CDP connected on attempt {attempt + 1}")
+                    return True
+                    
+                # Browser connected but no pages - might need to wait
+                if attempt < retries - 1:
+                    await asyncio.sleep(delay)
+                    delay *= 2  # Exponential backoff
+                    continue
+                    
+                return False
+                
+            except Exception as e:
+                last_error = e
+                if attempt < retries - 1:
+                    await asyncio.sleep(delay)
+                    delay *= 2
+                else:
+                    print(f"CDP connection failed after {retries} attempts: {e}")
+                    return False
+        
+        return False
     
     async def get_state(self) -> Optional[BrowserState]:
         """Extract current page state."""

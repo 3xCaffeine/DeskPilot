@@ -92,6 +92,7 @@ exec /usr/bin/google-chrome-stable \\\n\
   --safebrowsing-disable-auto-update \\\n\
   --disable-translate \\\n\
   --disable-features=TranslateUI,PasswordManagerOnboarding \\\n\
+  --start-maximized \\\n\
   --test-type \\\n\
   "$@"' > /usr/local/bin/chrome-with-cdp && \
     chmod +x /usr/local/bin/chrome-with-cdp && \

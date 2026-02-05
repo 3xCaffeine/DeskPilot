@@ -50,6 +50,7 @@ class Agent:
         last_expected_title = None
         success_markers = []
         verified = True # Base state for first step
+        consecutive_failures = 0  # Track stuck loops
 
         try:
             for step in range(1, task.max_steps + 1):
@@ -67,24 +68,23 @@ class Agent:
                 # Use URL for verification if in browser (more reliable than title)
                 verification_key = current_url if is_browser else current_title
                 
-                # INTERMEDIATE GUARD: Don't auto-finish on search engines if we are deep-diving
-                is_search_engine = any(s in verification_key.lower() for s in ["google", "bing", "search"])
-                
-                # We check for completion ONLY if we have markers to look for AND NOT on a search engine
-                if not is_search_engine and last_expected_title and last_expected_title.lower() in verification_key.lower():
-                    from ..perception.ocr import get_text_from_image
-                    page_text = get_text_from_image(screenshot).lower()
-                    
+                # COMPLETION CHECK: Only mark done if we have BOTH anchor match AND success indicators
+                # This prevents premature completion on intermediate pages (like Amazon homepage before searching)
+                if last_expected_title and last_expected_title.lower() in verification_key.lower():
                     # Parse indicators string to list
                     markers = [m.strip() for m in success_markers.split(",")] if success_markers else []
                     
-                    # If markers exist on screen, we are truly DONE
-                    if markers and any(m.lower() in page_text for m in markers):
-                        msg = f"Goal reached (Verified: {'URL' if is_browser else 'Title'}='{last_expected_title}', Content={success_markers})"
-                        done = DoneAction(final_answer=msg, reason="Anchor + Indicator Match")
-                        self._record(state, step, done, True, ss_path)
-                        state.mark_completed(msg)
-                        return TaskResult(success=True, steps_taken=step, final_answer=msg, run_id=task.run_id)
+                    # STRICT POLICY: Must have success_indicators AND find them on screen
+                    if markers:
+                        from ..perception.ocr import get_text_from_image
+                        page_text = get_text_from_image(screenshot).lower()
+                        
+                        if any(m.lower() in page_text for m in markers):
+                            msg = f"Goal reached (Verified: {'URL' if is_browser else 'Title'}='{last_expected_title}', Content={success_markers})"
+                            done = DoneAction(final_answer=msg, reason="Anchor + Indicator Match")
+                            self._record(state, step, done, True, ss_path)
+                            state.mark_completed(msg)
+                            return TaskResult(success=True, steps_taken=step, final_answer=msg, run_id=task.run_id)
 
                 text_state = TextState(**self._executor.get_text_state())
 
@@ -102,7 +102,9 @@ class Agent:
                     sequence_ok = True
                     for i, action in enumerate(actions):
                         # Execute individual action
+                        print(f"   🎯 Executing: {action.type} - {action}")
                         result = self._executor.execute(action)
+                        print(f"   {'✅' if result.ok else '❌'} Result: ok={result.ok}, error={result.error}")
                         action_str = f"{action.type}({getattr(action, 'key', getattr(action, 'text', ''))})"
                         self._record(state, step, action, result.ok, ss_path, result.error)
                         
@@ -117,10 +119,19 @@ class Agent:
                     # Post-sequence Local Validation (The Anchor) with Polling
                     anchor_found = False
                     print(f"⌛ Waiting for anchor: '{expected_title}'...")
-                    for _ in range(5): # Poll for up to 5 seconds
+                    for poll_attempt in range(5): # Poll for up to 5 seconds
                         current_state = self._executor.get_text_state()
                         current_title = current_state.get("window_title", "").lower()
+                        current_url = current_state.get("current_url", "")
+                        is_browser = current_state.get("is_browser", False)
+                        
+                        print(f"   Poll {poll_attempt + 1}: title='{current_title}', url='{current_url}', is_browser={is_browser}")
+                        
                         if expected_title.lower() in current_title:
+                            anchor_found = True
+                            break
+                        # Also check URL if in browser
+                        if is_browser and current_url and expected_title.lower() in current_url.lower():
                             anchor_found = True
                             break
                         import time
@@ -145,33 +156,71 @@ class Agent:
                         # Either way, the SEQUENCE worked, so we don't retry.
                         self._history.append(f"Step {step}: {actions} -> STEP SUCCESS (Anchor matched: '{current_title}')")
                         verified = True
+                        consecutive_failures = 0  # Reset on success
                         break
                     else:
                         # Hard Mismatch (Retry sequence)
                         print(f"⚠️ Anchor mismatch: Expected '{expected_title}', got '{current_title}'")
-                        self._history.append(f"Step {step}: {actions} -> FAIL (Anchor mismatch)")
+                        self._history.append(f"Step {step}: {actions} -> FAIL (Anchor mismatch: expected '{expected_title}' got '{current_title}')")
                         verified = False
+                        consecutive_failures += 1
                         self._executor.execute(WaitAction(seconds=1.5))
 
-                # === 4. ESCALATE (Vision fallback if LOCAL retries failed) ===
-                if not verified and self._vision:
+                # === 4. ESCALATE (CDP → Vision fallback if LOCAL retries failed) ===
+                if not verified:
+                    # Track failures - if stuck in loop, add urgent recovery hint to history
+                    if consecutive_failures >= 2:
+                        print(f"⚠️ LOOP DETECTED: {consecutive_failures} consecutive failures")
+                        recovery_hint = f"URGENT: Stuck in loop after {consecutive_failures} failures. current_url='{current_url if is_browser else 'N/A'}'. Use BROWSER_NAVIGATE or different approach!"
+                        self._history.append(recovery_hint)
+                    
                     current_state = self._executor.get_text_state()
                     current_title = current_state.get("window_title", "unknown")
+                    current_url = current_state.get("current_url", "")
+                    is_browser = current_state.get("is_browser", False)
                     
-                    print(f"🚨 Local validation failed. Escalating to Vision...")
-                    print(f"   Context: Expected '{expected_title}', found '{current_title}'")
+                    # Try CDP verification first if in browser
+                    if is_browser and current_url:
+                        print(f"🔍 Trying CDP verification...")
+                        # Check if URL matches expected pattern
+                        if expected_title.lower() in current_url.lower():
+                            print(f"   ✅ CDP verified: URL contains '{expected_title}'")
+                            verified = True
+                            self._history.append(f"Step {step}: {actions} -> OK (CDP URL match)")
+                        else:
+                            # Try checking page content via browser state
+                            browser_state = self._executor.get_browser_state()
+                            if browser_state and browser_state.visible_text:
+                                if any(marker.lower() in browser_state.visible_text.lower() 
+                                       for marker in success_markers.split(",") if marker.strip()):
+                                    print(f"   ✅ CDP verified: Content markers found")
+                                    verified = True
+                                    self._history.append(f"Step {step}: {actions} -> OK (CDP content match)")
                     
-                    fallback_action = self._escalate(
-                        screenshot, task.goal, step, 
-                        expected=expected_title, found=current_title
-                    )
+                    # Force vision if stuck in loop (even if CDP thinks it's OK - might be popup/modal)
+                    if consecutive_failures >= 3 and self._vision:
+                        print(f"🚨 STUCK IN LOOP - Forcing vision escalation...")
+                        verified = False  # Override CDP verification
                     
-                    if fallback_action and not isinstance(fallback_action, (DoneAction, FailAction)):
-                        print(f"📸 Vision suggested: {fallback_action.type}")
-                        self._executor.execute(fallback_action)
-                        # Re-verify after vision action
-                        final_state = self._executor.get_text_state()
-                        verified = expected_title.lower() in final_state.get("window_title", "").lower()
+                    # Fall back to vision if CDP didn't verify OR we're stuck
+                    if not verified and self._vision:
+                        print(f"🚨 Local validation failed. Escalating to Vision...")
+                        print(f"   Context: Expected '{expected_title}', found '{current_title if not is_browser else current_url}'")
+                        
+                        fallback_action = self._escalate(
+                            screenshot, task.goal, step, 
+                            expected=expected_title, found=current_title
+                        )
+                        
+                        if fallback_action and not isinstance(fallback_action, (DoneAction, FailAction)):
+                            print(f"📸 Vision suggested: {fallback_action.type}")
+                            self._executor.execute(fallback_action)
+                            # Re-verify after vision action
+                            final_state = self._executor.get_text_state()
+                            if final_state.get("is_browser"):
+                                verified = expected_title.lower() in final_state.get("current_url", "").lower()
+                            else:
+                                verified = expected_title.lower() in final_state.get("window_title", "").lower()
 
         except Exception as e:
             state.mark_failed(str(e))
@@ -194,13 +243,21 @@ class Agent:
     def _escalate(self, screenshot: Image.Image, goal: str, step: int, 
                   expected: str = None, found: str = None) -> Optional[Action]:
         """Vision fallback with targeted context."""
+        if not self._vision:
+            print(f"   ⚠️ Vision LLM not configured, cannot escalate")
+            return None
+            
         try:
             context = f"Local verification failed. Expected window title: '{expected}', but found: '{found}'."
-            return self._vision.get_next_action(
+            action = self._vision.get_next_action(
                 screenshot=screenshot, goal=goal,
                 history=[{"step": step, "note": context}]
             )
-        except: return None
+            print(f"   📸 Vision returned: {action.type if action else 'None'}")
+            return action
+        except Exception as e:
+            print(f"   ❌ Vision escalation error: {e}")
+            return None
 
     def _record(self, state: AgentState, step: int, action: Action,
                 ok: bool, ss_path: Path, error: str = None):

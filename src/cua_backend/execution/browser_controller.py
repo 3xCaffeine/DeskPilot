@@ -14,8 +14,12 @@ class BrowserController:
         self._page = page
     
     async def navigate(self, url: str, timeout: int = 30000) -> Dict[str, Any]:
-        """Navigate to URL."""
+        """Navigate to URL. Auto-adds https:// if no protocol specified."""
         try:
+            # Add protocol if missing
+            if not url.startswith(('http://', 'https://', 'file://', 'about:', 'chrome://')):
+                url = f'https://{url}'
+            
             response = await self._page.goto(url, timeout=timeout, wait_until="domcontentloaded")
             return {
                 "success": True,
@@ -38,9 +42,14 @@ class BrowserController:
             return {"success": False, "error": str(e)}
     
     async def type_into_element(self, selector: str, text: str, timeout: int = 5000) -> Dict[str, Any]:
-        """Type text into input element."""
+        """Type text into input element with visible typing animation, then press Enter."""
         try:
-            await self._page.fill(selector, text, timeout=timeout)
+            # Click the element first to focus it
+            await self._page.click(selector, timeout=timeout)
+            # Type with animation (slower but visible)
+            await self._page.type(selector, text, delay=50)
+            # Press Enter to submit
+            await self._page.press(selector, 'Enter')
             return {"success": True, "selector": selector, "text_length": len(text)}
         except PlaywrightTimeout:
             return {"success": False, "error": f"Input not found: {selector}"}
@@ -109,5 +118,33 @@ class BrowserController:
             return {"success": True, "text": text or ""}
         except PlaywrightTimeout:
             return {"success": False, "error": f"Element not found: {selector}"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    # Recovery methods for error handling
+    
+    async def go_back(self) -> Dict[str, Any]:
+        """Navigate back in browser history."""
+        try:
+            await self._page.go_back(wait_until="domcontentloaded")
+            return {"success": True, "url": self._page.url}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    async def recover_from_popup(self) -> Dict[str, Any]:
+        """Dismiss any dialogs/alerts that might block interaction."""
+        try:
+            # Close any open dialogs
+            self._page.on("dialog", lambda dialog: dialog.dismiss())
+            return {"success": True, "message": "Dialog handler registered"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    async def recover_focus(self) -> Dict[str, Any]:
+        """Refocus main page content (useful after popup/modal)."""
+        try:
+            # Click body to regain focus
+            await self._page.evaluate("document.body.focus()")
+            return {"success": True}
         except Exception as e:
             return {"success": False, "error": str(e)}

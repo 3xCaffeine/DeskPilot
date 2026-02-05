@@ -49,7 +49,10 @@ class PlannerInput:
 @dataclass  
 class PlannerOutput:
     """Structured decision from the planner."""
-    action_type: Literal["PRESS_KEY", "TYPE", "WAIT", "DONE", "FAIL", "CLICK", "SCROLL"]
+    action_type: Literal[
+        "PRESS_KEY", "TYPE", "WAIT", "DONE", "FAIL", "CLICK", "SCROLL",
+        "BROWSER_NAVIGATE", "BROWSER_CLICK", "BROWSER_TYPE", "BROWSER_SUBMIT", "BROWSER_WAIT"
+    ]
     action_param: str = ""  # key name, text to type, or seconds
     expected_window_title: str = "" # Anchor for local verification
     success_indicators: str = "" # Comma-separated success markers
@@ -68,19 +71,38 @@ class PlanNextAction(dspy.Signature):
     Decide the next sequence of actions to achieve the goal using accessibility-first principles.
     
     STANDARD SKILLS:
-    - Open App: PRESS_KEY("Alt+F2"); WAIT(1); TYPE("app_name"); PRESS_KEY("ENTER")
-    - Info Search: PRESS_KEY("Ctrl+L"); WAIT(0.5); TYPE("Topic info summary"); PRESS_KEY("ENTER") (Always add 'info summary' for deep-dives)
-    - Browser Navigation: If info is not visible, use SCROLL("down") or PRESS_KEY("pagedown").
+    - Open App: PRESS_KEY("Alt+F2"); WAIT(1); TYPE("google-chrome"); PRESS_KEY("ENTER")
+    
+    **CRITICAL TASK PARSING**:
+    When goal has multiple parts like "go to X and search for Y":
+    - Step 1: Navigate to X (success_indicators: EMPTY)
+    - Step 2: Search for Y on X (success_indicators: "Y, search results")
+    - "search [site]" = BROWSER_NAVIGATE([site].com), NOT searching for site name in Google
+    
+    BROWSER CDP ACTIONS (when is_browser=True):
+    - BROWSER_NAVIGATE(url) - Navigate directly to URL
+    - BROWSER_TYPE(selector, text) - Type text into element matching selector
+    - BROWSER_CLICK(selector) - Click element
+    - BROWSER_WAIT(selector) - Wait for element
+    
+    After typing in search box, you must submit (PRESS_KEY(ENTER) or BROWSER_CLICK on submit button).
     
     GUIDELINES:
     1. Output a SEMICOLON-SEPARATED sequence of actions to save LLM calls.
-    2. Example sequence: PRESS_KEY(Alt+F2); WAIT(1); TYPE(firefox); PRESS_KEY(ENTER)
+    2. **BROWSER PRIORITY**: When is_browser=True, ALWAYS use BROWSER_* actions (BROWSER_NAVIGATE, BROWSER_TYPE, BROWSER_CLICK). Never use TYPE or PRESS_KEY for web interactions - they are unreliable in browsers.
     3. If the goal is reached, use the DONE action.
-    4. REPETITION POLICY: If history shows you've tried an action before and it failed or didn't show success markers, DO NOT REPEAT IT. Instead, use an investigation action like 'ls' or 'SCROLL' or 'WAIT'.
+    4. **ANTI-LOOP POLICY**: If history shows REPEATED FAILURES (same action failing 2+ times), you are STUCK. Use recovery:
+       - Browser stuck? Use BROWSER_NAVIGATE to go back to the target site
+       - Wrong page? Check current_url and navigate directly: BROWSER_NAVIGATE(correctsite.com)
+       - Can't find element? Try alternative selectors or escalate: needs_vision=True
+       DO NOT repeat the same failing action more than twice.
     5. GOAL DECOMPOSITION: Break down the main goal into 3-5 sub_goals. Each sub_goal must be a specific, verifiable state (e.g. 'Firefox Opened', 'Search results loaded', 'article page active').
-    6. COMPLETION POLICY: ONLY provide 'success_indicators' if this action sequence completes the ENTIRE goal. If this is an intermediate step (e.g. just opening the browser), leave 'success_indicators' EMPTY.
+    6. **CRITICAL COMPLETION POLICY**: ONLY set 'success_indicators' when the FINAL step that completes the ENTIRE goal is being executed.
+       - Opening apps, navigating to sites → success_indicators: "" (ALWAYS EMPTY for intermediate steps)
+       - Only the LAST action that fulfills the goal → success_indicators: "expected content keywords"
+       - Multi-part goals: Each sub-goal except the final one has EMPTY success_indicators
     7. WEB BEHAVIOR: Search results are INTERMEDIATE. If the user asks for 'info' or 'scrape', you MUST navigate into a specific website. Do NOT use DONE on a Google/Bing/Search result page. Use Vision fallback if you need to click a specific link.
-    8. SOFT ANCHORS: For browsers, use GENERIC 'expected_window_title' (e.g. 'Mozilla Firefox' or 'Google Search') rather than the exact page title, as titles are dynamic.
+    8. **SOFT ANCHORS**: Use GENERIC 'expected_window_title' like 'Google Chrome' NOT specific sites like 'Amazon.com' - page titles are dynamic and will cause false mismatches.
     """
     
     # Inputs
@@ -90,12 +112,15 @@ class PlanNextAction(dspy.Signature):
     step: int = dspy.InputField(desc="Current step number (1-indexed)")
     window_title: str = dspy.InputField(desc="Current window title (via xdotool)")
     active_app: str = dspy.InputField(desc="Currently focused application")
+    current_url: str = dspy.InputField(desc="Current browser URL (if in Chrome, otherwise empty)")
+    is_browser: bool = dspy.InputField(desc="True if currently in Chrome browser")
+    focused_element: str = dspy.InputField(desc="Currently focused input element (if any)")
     
     # Outputs
-    action_sequence: str = dspy.OutputField(desc="Sequence of actions (e.g., PRESS_KEY(Alt+F2); WAIT(1); TYPE(firefox); PRESS_KEY(ENTER))")
-    expected_window_title: str = dspy.OutputField(desc="The window title expected after this sequence (e.g., 'Mozilla Firefox' or 'Terminal')")
-    success_indicators: str = dspy.OutputField(desc="Comma-separated strings that prove the ENTIRE goal is reached. Leave EMPTY for intermediate steps.")
-    sub_goals: str = dspy.OutputField(desc="Comma-separated list of all sub-tasks needed to finish (e.g., 'Open Browser, Search Google, Click Result')")
+    action_sequence: str = dspy.OutputField(desc="Semicolon-separated actions. Use BROWSER_NAVIGATE to go to websites when is_browser=True.")
+    expected_window_title: str = dspy.OutputField(desc="**SOFT ANCHOR**: Generic title like 'Google Chrome', never specific page names.")
+    success_indicators: str = dspy.OutputField(desc="**CRITICAL**: Comma-separated strings visible ONLY when ENTIRE goal complete. EMPTY for intermediate steps.")
+    sub_goals: str = dspy.OutputField(desc="Comma-separated sub-tasks (e.g., 'Navigate to site, Search for query, View results')")
     reason: str = dspy.OutputField(desc="Reasoning for this sequence")
     needs_vision: bool = dspy.OutputField(desc="Set to True ONLY if text signals are insufficient")
 
@@ -139,6 +164,9 @@ class ActionPlanner(dspy.Module):
             step=inp.step,
             window_title=inp.text_state.window_title or "unknown",
             active_app=inp.text_state.active_app or "unknown",
+            current_url=inp.text_state.current_url or "",
+            is_browser=inp.text_state.is_browser,
+            focused_element=inp.text_state.focused_element or "",
         )
         
         return PlannerOutput(
@@ -215,7 +243,9 @@ def parse_actions(output: PlannerOutput) -> list:
     into a list of Action objects.
     """
     from ..schemas.actions import (
-        PressKeyAction, TypeAction, WaitAction, DoneAction, FailAction, ScrollAction, Action
+        PressKeyAction, TypeAction, WaitAction, DoneAction, FailAction, ScrollAction,
+        BrowserNavigateAction, BrowserClickAction, BrowserTypeAction, 
+        BrowserSubmitAction, BrowserWaitAction, Action
     )
     
     actions = []
@@ -231,7 +261,7 @@ def parse_actions(output: PlannerOutput) -> list:
             actions.append(FailAction(error="Task failed", reason=output.reason))
             continue
 
-        # Regex to match TYPE(param) or TYPE("param")
+        # Regex to match TYPE(param) or TYPE("param") or BROWSER_TYPE(selector, text)
         match = re.match(r"(\w+)\((.*)\)", part)
         if not match:
             continue
@@ -239,6 +269,37 @@ def parse_actions(output: PlannerOutput) -> list:
         a_type = match.group(1).upper()
         a_param = match.group(2).strip("'\"") # Remove quotes
         
+        # Handle browser actions with multiple parameters
+        if a_type.startswith("BROWSER_"):
+            # Clean up common LLM mistakes like url='amazon.com' or selector='input'
+            # Extract just the values, stripping parameter names if present
+            cleaned_params = []
+            for p in a_param.split(",", 1):
+                p = p.strip().strip("'\"")
+                # Remove parameter names like "url=", "selector=", "text="
+                if '=' in p:
+                    p = p.split('=', 1)[1].strip("'\"")
+                cleaned_params.append(p)
+            
+            if a_type == "BROWSER_NAVIGATE":
+                url = cleaned_params[0] if cleaned_params else ""
+                actions.append(BrowserNavigateAction(url=url, reason=output.reason))
+            elif a_type == "BROWSER_CLICK":
+                selector = cleaned_params[0] if cleaned_params else ""
+                actions.append(BrowserClickAction(selector=selector, reason=output.reason))
+            elif a_type == "BROWSER_TYPE":
+                selector = cleaned_params[0] if len(cleaned_params) > 0 else ""
+                text = cleaned_params[1] if len(cleaned_params) > 1 else ""
+                actions.append(BrowserTypeAction(selector=selector, text=text, reason=output.reason))
+            elif a_type == "BROWSER_SUBMIT":
+                selector = cleaned_params[0] if cleaned_params else ""
+                actions.append(BrowserSubmitAction(selector=selector, reason=output.reason))
+            elif a_type == "BROWSER_WAIT":
+                selector = cleaned_params[0] if cleaned_params else ""
+                actions.append(BrowserWaitAction(selector=selector, reason=output.reason))
+            continue
+        
+        # Regular desktop actions
         if a_type == "PRESS_KEY":
             actions.append(PressKeyAction(key=a_param, reason=output.reason))
         elif a_type == "TYPE":

@@ -13,6 +13,7 @@ USAGE:
 
 from .executor import Executor, ExecutionResult
 from .desktop_controller import DesktopController, create_controller, WindowInfo
+from .browser_controller import BrowserController
 
 __all__ = [
     "Executor",
@@ -20,4 +21,5 @@ __all__ = [
     "DesktopController",
     "create_controller",
     "WindowInfo",
+    "BrowserController",
 ]

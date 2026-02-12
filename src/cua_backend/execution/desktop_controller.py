@@ -19,6 +19,7 @@ import time
 from dataclasses import dataclass
 from typing import Optional, List
 from PIL import Image
+import asyncio
 
 
 # ─────────────────────────────────────────────────────────────
@@ -52,6 +53,11 @@ from ..schemas.actions import (
     WaitAction,
     DoneAction,
     FailAction,
+    BrowserNavigateAction,
+    BrowserClickAction,
+    BrowserTypeAction,
+    BrowserSubmitAction,
+    BrowserWaitAction,
 )
 
 
@@ -84,6 +90,10 @@ class DesktopController(Executor):
         """
         if startup_delay > 0:
             time.sleep(startup_delay)
+        
+        # Browser integration (lazy-loaded)
+        self._browser_provider = None
+        self._browser_controller = None
     
     def screenshot(self) -> Image.Image:
         """
@@ -134,6 +144,12 @@ class DesktopController(Executor):
             elif isinstance(action, FailAction):
                 # Agent is signaling failure
                 return ExecutionResult(ok=False, error=action.error)
+            
+            # Browser actions - route to CDP controller
+            elif isinstance(action, (BrowserNavigateAction, BrowserClickAction, 
+                                     BrowserTypeAction, BrowserSubmitAction, 
+                                     BrowserWaitAction)):
+                return self._handle_browser_action(action)
                 
             else:
                 return ExecutionResult(
@@ -156,10 +172,6 @@ class DesktopController(Executor):
         """Handle CLICK action."""
         click(action.x, action.y)
     
-    def _handle_type(self, action: TypeAction) -> None:
-        """Handle TYPE action."""
-        type_text(action.text)
-    
     def _handle_scroll(self, action: ScrollAction) -> None:
         """Handle SCROLL action."""
         scroll(action.amount)
@@ -168,9 +180,66 @@ class DesktopController(Executor):
         """Handle PRESS_KEY action."""
         press_key(action.key)
     
+    def _handle_type(self, action: TypeAction) -> None:
+        """Handle TYPE action."""
+        type_text(action.text)
+    
     def _handle_wait(self, action: WaitAction) -> None:
         """Handle WAIT action."""
         wait(action.seconds)
+    
+    def _handle_browser_action(self, action: Action) -> ExecutionResult:
+        """Handle browser-specific actions via CDP."""
+        try:
+            # Allow nested event loops for browser actions
+            import nest_asyncio
+            nest_asyncio.apply()
+            result = asyncio.run(self._execute_browser_action(action))
+            return ExecutionResult(
+                ok=result.get("success", False),
+                error=result.get("error")
+            )
+        except Exception as e:
+            return ExecutionResult(ok=False, error=f"Browser action failed: {e}")
+    
+    async def _execute_browser_action(self, action: Action) -> dict:
+        """Execute browser action async."""
+        # Ensure browser connection
+        if not await self._ensure_browser_connected():
+            return {"success": False, "error": "Chrome not connected"}
+        
+        controller = self._browser_controller
+        
+        if isinstance(action, BrowserNavigateAction):
+            return await controller.navigate(action.url)
+        elif isinstance(action, BrowserClickAction):
+            return await controller.click_element(action.selector)
+        elif isinstance(action, BrowserTypeAction):
+            return await controller.type_into_element(action.selector, action.text)
+        elif isinstance(action, BrowserSubmitAction):
+            return await controller.submit_form(action.selector)
+        elif isinstance(action, BrowserWaitAction):
+            return await controller.wait_for_selector(action.selector)
+        
+        return {"success": False, "error": "Unknown browser action"}
+    
+    async def _ensure_browser_connected(self) -> bool:
+        """Ensure browser provider and controller are connected."""
+        if self._browser_controller:
+            return True
+        
+        try:
+            from ..perception.browser_state import BrowserStateProvider
+            from .browser_controller import BrowserController
+            
+            self._browser_provider = BrowserStateProvider()
+            if await self._browser_provider.connect():
+                self._browser_controller = BrowserController(self._browser_provider._page)
+                return True
+        except Exception:
+            pass
+        
+        return False
 
     # ─────────────────────────────────────────────────────────────
     # ACCESSIBILITY STATE READING (Phase 1)
@@ -180,7 +249,7 @@ class DesktopController(Executor):
     def get_active_window(self) -> Optional[WindowInfo]:
         """
         Get information about the currently focused window.
-        Uses xdotool to query the active window.
+        Uses xdotool to query the active window and xprop for the class.
         
         Returns:
             WindowInfo with window_id, title, app_name, or None if failed
@@ -203,12 +272,27 @@ class DesktopController(Executor):
             )
             title = title_result.stdout.strip() if title_result.returncode == 0 else ""
             
-            # Get window class (app name)
-            class_result = subprocess.run(
-                ["xdotool", "getwindowclassname", window_id],
-                capture_output=True, text=True, timeout=2
-            )
-            app_name = class_result.stdout.strip() if class_result.returncode == 0 else ""
+            # Get window class (app name) using xprop WM_CLASS
+            # xprop returns: WM_CLASS(STRING) = "thunar", "Thunar"
+            # We want the second value (the class name)
+            app_name = ""
+            try:
+                class_result = subprocess.run(
+                    ["xprop", "-id", window_id, "WM_CLASS"],
+                    capture_output=True, text=True, timeout=2
+                )
+                if class_result.returncode == 0 and "=" in class_result.stdout:
+                    # Parse: WM_CLASS(STRING) = "instance", "ClassName"
+                    parts = class_result.stdout.split("=", 1)[1].strip()
+                    # Extract class names from quoted strings
+                    import re
+                    names = re.findall(r'"([^"]*)"', parts)
+                    if len(names) >= 2:
+                        app_name = names[1]  # ClassName (e.g., "Thunar")
+                    elif len(names) == 1:
+                        app_name = names[0]
+            except Exception:
+                pass
             
             return WindowInfo(
                 window_id=window_id,
@@ -222,7 +306,7 @@ class DesktopController(Executor):
     def get_window_list(self) -> List[WindowInfo]:
         """
         Get list of all open windows.
-        Uses wmctrl to enumerate windows.
+        Uses wmctrl to enumerate windows and xdotool for class names.
         
         Returns:
             List of WindowInfo objects for each open window
@@ -248,9 +332,29 @@ class DesktopController(Executor):
                 if len(parts) >= 4:
                     wid = parts[0]
                     title = parts[3]
+                    
+                    # Get app class name via xprop WM_CLASS (convert hex wmctrl ID to decimal)
+                    app_name = ""
+                    try:
+                        dec_id = str(int(wid, 16))
+                        class_result = subprocess.run(
+                            ["xprop", "-id", dec_id, "WM_CLASS"],
+                            capture_output=True, text=True, timeout=1
+                        )
+                        if class_result.returncode == 0 and "=" in class_result.stdout:
+                            import re
+                            names = re.findall(r'"([^"]*)"', class_result.stdout)
+                            if len(names) >= 2:
+                                app_name = names[1]
+                            elif len(names) == 1:
+                                app_name = names[0]
+                    except Exception:
+                        pass
+                    
                     windows.append(WindowInfo(
-                        window_id=wid,
+                        window_id=str(int(wid, 16)),  # Store as decimal for xdotool compat
                         title=title,
+                        app_name=app_name,
                         is_active=(wid == active_id)
                     ))
                     
@@ -265,11 +369,48 @@ class DesktopController(Executor):
         Returns a dict compatible with PlannerInput.text_state.
         """
         active = self.get_active_window()
-        return {
+        state = {
             "active_app": active.app_name if active else "",
             "window_title": active.title if active else "",
             "focused_element": "",  # TODO: implement AT-SPI query
         }
+        
+        # Add browser state if Chrome is active
+        if self.is_browser_active():
+            browser_state = self.get_browser_state()
+            if browser_state:
+                state["current_url"] = browser_state.url
+                state["is_browser"] = True
+                if browser_state.focused_element:
+                    state["focused_element"] = str(browser_state.focused_element)
+        
+        return state
+    
+    def is_browser_active(self) -> bool:
+        """Check if Chrome browser is currently active."""
+        active = self.get_active_window()
+        if not active:
+            return False
+        # Check both app_name and window_title for Chrome
+        app = active.app_name.lower() if active.app_name else ""
+        title = active.title.lower() if active.title else ""
+        return "chrome" in app or "chromium" in app or "chrome" in title
+    
+    def get_browser_state(self):
+        """Get current browser state via CDP (sync wrapper)."""
+        try:
+            import nest_asyncio
+            nest_asyncio.apply()
+            return asyncio.run(self._get_browser_state_async())
+        except Exception as e:
+            print(f"Failed to get browser state: {e}")
+            return None
+    
+    async def _get_browser_state_async(self):
+        """Get browser state async."""
+        if not await self._ensure_browser_connected():
+            return None
+        return await self._browser_provider.get_state()
 
 
 # ─────────────────────────────────────────────────────────────

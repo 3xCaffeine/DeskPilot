@@ -50,6 +50,34 @@ class FailAction(ActionBase):
     error: str
 
 
+# ---- Browser actions (CDP-based) ----
+
+class BrowserNavigateAction(ActionBase):
+    type: Literal["BROWSER_NAVIGATE"] = "BROWSER_NAVIGATE"
+    url: str = Field(description="URL to navigate to")
+
+
+class BrowserClickAction(ActionBase):
+    type: Literal["BROWSER_CLICK"] = "BROWSER_CLICK"
+    selector: str = Field(description="CSS selector for element to click")
+
+
+class BrowserTypeAction(ActionBase):
+    type: Literal["BROWSER_TYPE"] = "BROWSER_TYPE"
+    selector: str = Field(description="CSS selector for input element")
+    text: str = Field(min_length=1)
+
+
+class BrowserSubmitAction(ActionBase):
+    type: Literal["BROWSER_SUBMIT"] = "BROWSER_SUBMIT"
+    selector: str = Field(description="CSS selector for form or submit button")
+
+
+class BrowserWaitAction(ActionBase):
+    type: Literal["BROWSER_WAIT"] = "BROWSER_WAIT"
+    selector: str = Field(description="CSS selector to wait for")
+
+
 # Union type (the LLM must return ONE of these)
 Action = Union[
     ClickAction,
@@ -59,4 +87,9 @@ Action = Union[
     WaitAction,
     DoneAction,
     FailAction,
+    BrowserNavigateAction,
+    BrowserClickAction,
+    BrowserTypeAction,
+    BrowserSubmitAction,
+    BrowserWaitAction,
 ]

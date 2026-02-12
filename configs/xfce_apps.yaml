@@ -19,10 +19,10 @@ editor:
 
 file_manager:
   bin: "thunar"
-  title: "File Manager"
+  title: "Thunar"
   indicators: ["Documents", "Downloads"]
 
 application_finder:
   bin: "xfce4-appfinder"
   title: "Application Finder"
-  indicators: ["Search"]
+  indicators: ["Search", "App"]

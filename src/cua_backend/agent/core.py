@@ -6,6 +6,7 @@ Implements OBSERVE → DECIDE → EXECUTE → VERIFY → ESCALATE state machine.
 from __future__ import annotations
 
 import json
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
@@ -119,24 +120,78 @@ class Agent:
                     # Post-sequence Local Validation (The Anchor) with Polling
                     anchor_found = False
                     print(f"⌛ Waiting for anchor: '{expected_title}'...")
+                    expected_lower = expected_title.lower()
+                    
                     for poll_attempt in range(5): # Poll for up to 5 seconds
                         current_state = self._executor.get_text_state()
                         current_title = current_state.get("window_title", "").lower()
+                        current_app = current_state.get("active_app", "").lower()
                         current_url = current_state.get("current_url", "")
                         is_browser = current_state.get("is_browser", False)
                         
-                        print(f"   Poll {poll_attempt + 1}: title='{current_title}', url='{current_url}', is_browser={is_browser}")
+                        # Logging
+                        log_msg = f"   Poll {poll_attempt + 1}: title='{current_title}', app='{current_app}'"
+                        if is_browser:
+                            log_msg += f", url='{current_url}'"
+                        print(log_msg)
                         
-                        if expected_title.lower() in current_title:
+                        # --- ANCHOR VERIFICATION ---
+                        # Check in order of reliability:
+                        
+                        # 1. App Class Name match (MOST RELIABLE for desktop apps)
+                        #    e.g. expected='Thunar', active_app='Thunar' → match!
+                        #    This works even when the window title is 'File System' or 'docs'
+                        if expected_lower in current_app:
+                            print(f"   ✅ App class match: '{expected_title}' found in app='{current_app}'")
                             anchor_found = True
                             break
-                        # Also check URL if in browser
-                        if is_browser and current_url and expected_title.lower() in current_url.lower():
+                        
+                        # 2. Window Title match (case-insensitive substring)
+                        if expected_lower in current_title:
                             anchor_found = True
                             break
+                        
+                        # 3. Browser URL match
+                        if is_browser and current_url and expected_lower in current_url.lower():
+                            anchor_found = True
+                            break
+                        
+                        # 4. Keyword Intersection (fuzzy match for multi-word titles)
+                        noise = {"untitled", "new", "file", "window", "a", "the", "and", "system"}
+                        expected_kw = {w for w in expected_lower.split() if w not in noise and len(w) > 2}
+                        found_kw = {w for w in current_title.split() if w not in noise and len(w) > 2}
+                        if expected_kw and (expected_kw & found_kw):
+                            print(f"   ✅ Keyword match: '{expected_title}' ≈ '{current_title}'")
+                            anchor_found = True
+                            break
+                        
+                        # 5. Transition Guard (dialogs, launchers)
+                        #    If we see these, keep waiting - don't match yet, but don't fail either
+                        transition_titles = ["save as", "open file", "confirm", "select", "upload",
+                                             "create new folder", "rename"]
+                        if any(t in current_title for t in transition_titles):
+                            if poll_attempt == 0:
+                                print(f"   ℹ️ Dialog detected ('{current_title}'). Waiting for target...")
+                        
                         import time
                         time.sleep(1)
                     
+                    # If anchor still not found after polling, check if app launched but
+                    # the launcher is covering it. Try to detect app in window list.
+                    if not anchor_found:
+                        try:
+                            windows = self._executor.get_window_list()
+                            for w in windows:
+                                if expected_lower in w.title.lower() or expected_lower in (w.app_name or "").lower():
+                                    print(f"   ✅ Found '{expected_title}' in background window: '{w.title}'")
+                                    # Focus it
+                                    subprocess.run(["xdotool", "windowactivate", w.window_id],
+                                                   timeout=2, capture_output=True)
+                                    import time; time.sleep(0.5)
+                                    anchor_found = True
+                                    break
+                        except Exception:
+                            pass
                     if anchor_found:
                         # Step sequence worked (Anchor matched)
                         is_search_engine = any(s in current_title for s in ["google", "bing", "search"])
@@ -212,15 +267,24 @@ class Agent:
                             expected=expected_title, found=current_title
                         )
                         
-                        if fallback_action and not isinstance(fallback_action, (DoneAction, FailAction)):
-                            print(f"📸 Vision suggested: {fallback_action.type}")
-                            self._executor.execute(fallback_action)
-                            # Re-verify after vision action
-                            final_state = self._executor.get_text_state()
-                            if final_state.get("is_browser"):
-                                verified = expected_title.lower() in final_state.get("current_url", "").lower()
+                        if fallback_action:
+                            if isinstance(fallback_action, DoneAction):
+                                print(f"🏁 Vision determined task is DONE: {fallback_action.final_answer}")
+                                state.mark_completed(fallback_action.final_answer)
+                                return TaskResult(success=True, steps_taken=step, final_answer=fallback_action.final_answer, run_id=task.run_id)
+                            elif isinstance(fallback_action, FailAction):
+                                print(f"❌ Vision determined task FAILED: {fallback_action.error}")
+                                state.mark_failed(fallback_action.error)
+                                return TaskResult(success=False, steps_taken=step, error=fallback_action.error, run_id=task.run_id)
                             else:
-                                verified = expected_title.lower() in final_state.get("window_title", "").lower()
+                                print(f"📸 Vision suggested: {fallback_action.type}")
+                                self._executor.execute(fallback_action)
+                                # Re-verify after vision action
+                                final_state = self._executor.get_text_state()
+                                if final_state.get("is_browser"):
+                                    verified = expected_title.lower() in final_state.get("current_url", "").lower()
+                                else:
+                                    verified = expected_title.lower() in final_state.get("window_title", "").lower()
 
         except Exception as e:
             state.mark_failed(str(e))

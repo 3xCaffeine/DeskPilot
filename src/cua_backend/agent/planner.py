@@ -71,7 +71,9 @@ class PlanNextAction(dspy.Signature):
     Decide the next sequence of actions to achieve the goal using accessibility-first principles.
     
     STANDARD SKILLS:
-    - Open App: PRESS_KEY("Alt+F2"); WAIT(1); TYPE("google-chrome"); PRESS_KEY("ENTER")
+    - Open App: PRESS_KEY("ESCAPE"); WAIT(0.5); PRESS_KEY("Alt+F2"); WAIT(1.5); TYPE("app-name"); PRESS_KEY("ENTER")
+    - File Path Navigation: PRESS_KEY("Ctrl+L"); WAIT(1); TYPE("/app/path"); PRESS_KEY("ENTER"); WAIT(1) (MANDATORY for finding files)
+    - File/Save Dialogs: PRESS_KEY("Ctrl+S"); WAIT(1); TYPE("filename"); PRESS_KEY("ENTER") (CRITICAL: Always WAIT after Ctrl+S/Ctrl+O)
     
     **CRITICAL TASK PARSING**:
     When goal has multiple parts like "go to X and search for Y":
@@ -89,20 +91,24 @@ class PlanNextAction(dspy.Signature):
     
     GUIDELINES:
     1. Output a SEMICOLON-SEPARATED sequence of actions to save LLM calls.
-    2. **BROWSER PRIORITY**: When is_browser=True, ALWAYS use BROWSER_* actions (BROWSER_NAVIGATE, BROWSER_TYPE, BROWSER_CLICK). Never use TYPE or PRESS_KEY for web interactions - they are unreliable in browsers.
-    3. If the goal is reached, use the DONE action.
-    4. **ANTI-LOOP POLICY**: If history shows REPEATED FAILURES (same action failing 2+ times), you are STUCK. Use recovery:
+    2. **SEQUENCE LENGTH POLICY**: Keep sequences short (MAX 5-8 actions). Do NOT try to complete complex tasks in one sequence. It is better to finish a sub-goal, verify, and then plan the next step.
+    3. **BROWSER PRIORITY**: When is_browser=True, ALWAYS use BROWSER_* actions (BROWSER_NAVIGATE, BROWSER_TYPE, BROWSER_CLICK). Never use TYPE or PRESS_KEY for web interactions - they are unreliable in browsers.
+    4. If the goal is reached, use the DONE action.
+    5. **ANTI-LOOP POLICY**: If history shows REPEATED FAILURES (same action failing 2+ times), you are STUCK. Use recovery:
        - Browser stuck? Use BROWSER_NAVIGATE to go back to the target site
        - Wrong page? Check current_url and navigate directly: BROWSER_NAVIGATE(correctsite.com)
        - Can't find element? Try alternative selectors or escalate: needs_vision=True
        DO NOT repeat the same failing action more than twice.
-    5. GOAL DECOMPOSITION: Break down the main goal into 3-5 sub_goals. Each sub_goal must be a specific, verifiable state (e.g. 'Firefox Opened', 'Search results loaded', 'article page active').
-    6. **CRITICAL COMPLETION POLICY**: ONLY set 'success_indicators' when the FINAL step that completes the ENTIRE goal is being executed.
+    6. GOAL DECOMPOSITION: Break down the main goal into 3-5 sub_goals. Each sub_goal must be a specific, verifiable state (e.g. 'Firefox Opened', 'Search results loaded', 'article page active').
+    7. **CRITICAL COMPLETION POLICY**: ONLY set 'success_indicators' when the FINAL step that completes the ENTIRE goal is being executed.
        - Opening apps, navigating to sites → success_indicators: "" (ALWAYS EMPTY for intermediate steps)
        - Only the LAST action that fulfills the goal → success_indicators: "expected content keywords"
        - Multi-part goals: Each sub-goal except the final one has EMPTY success_indicators
-    7. WEB BEHAVIOR: Search results are INTERMEDIATE. If the user asks for 'info' or 'scrape', you MUST navigate into a specific website. Do NOT use DONE on a Google/Bing/Search result page. Use Vision fallback if you need to click a specific link.
-    8. **SOFT ANCHORS**: Use GENERIC 'expected_window_title' like 'Google Chrome' NOT specific sites like 'Amazon.com' - page titles are dynamic and will cause false mismatches.
+    8. WEB BEHAVIOR: Search results are INTERMEDIATE. If the user asks for 'info' or 'scrape', you MUST navigate into a specific website. Do NOT use DONE on a Google/Bing/Search result page. Use Vision fallback if you need to click a specific link.
+    9. **SOFT ANCHORS**: Use GENERIC 'expected_window_title' like 'Google Chrome' NOT specific sites like 'Amazon.com' - page titles are dynamic and will cause false mismatches.
+    10. **DIALOG TIMING**: Transition windows like "Save As" or "Open File" appear slowly. Always include a WAIT(1) after the trigger key (Ctrl+S, Ctrl+O) and before typing the filename.
+    11. **ABSOLUTE PATHS**: In Thunar, ALWAYS use File Path Navigation (Ctrl+L) to go to specific folders (e.g., '/app/docs'). Do NOT rely on clicking folders in the view as they might be hidden. The base path is ALWAYS /app, not /home/user.
+    12. **LAUNCHER RECOVERY**: If the window title is "app" or "application finder" after you sent ENTER, the launcher is stuck on top. Use PRESS_KEY("ESCAPE") and WAIT(1) to clear it. Do NOT try to use Alt+F2 again in the same sequence. Stop after ESCAPE so you can see if the target app was actually launched behind it.
     """
     
     # Inputs

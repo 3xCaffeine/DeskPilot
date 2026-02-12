@@ -249,7 +249,7 @@ class DesktopController(Executor):
     def get_active_window(self) -> Optional[WindowInfo]:
         """
         Get information about the currently focused window.
-        Uses xdotool to query the active window.
+        Uses xdotool to query the active window and xprop for the class.
         
         Returns:
             WindowInfo with window_id, title, app_name, or None if failed
@@ -272,12 +272,27 @@ class DesktopController(Executor):
             )
             title = title_result.stdout.strip() if title_result.returncode == 0 else ""
             
-            # Get window class (app name)
-            class_result = subprocess.run(
-                ["xdotool", "getwindowclassname", window_id],
-                capture_output=True, text=True, timeout=2
-            )
-            app_name = class_result.stdout.strip() if class_result.returncode == 0 else ""
+            # Get window class (app name) using xprop WM_CLASS
+            # xprop returns: WM_CLASS(STRING) = "thunar", "Thunar"
+            # We want the second value (the class name)
+            app_name = ""
+            try:
+                class_result = subprocess.run(
+                    ["xprop", "-id", window_id, "WM_CLASS"],
+                    capture_output=True, text=True, timeout=2
+                )
+                if class_result.returncode == 0 and "=" in class_result.stdout:
+                    # Parse: WM_CLASS(STRING) = "instance", "ClassName"
+                    parts = class_result.stdout.split("=", 1)[1].strip()
+                    # Extract class names from quoted strings
+                    import re
+                    names = re.findall(r'"([^"]*)"', parts)
+                    if len(names) >= 2:
+                        app_name = names[1]  # ClassName (e.g., "Thunar")
+                    elif len(names) == 1:
+                        app_name = names[0]
+            except Exception:
+                pass
             
             return WindowInfo(
                 window_id=window_id,
@@ -291,7 +306,7 @@ class DesktopController(Executor):
     def get_window_list(self) -> List[WindowInfo]:
         """
         Get list of all open windows.
-        Uses wmctrl to enumerate windows.
+        Uses wmctrl to enumerate windows and xdotool for class names.
         
         Returns:
             List of WindowInfo objects for each open window
@@ -317,9 +332,29 @@ class DesktopController(Executor):
                 if len(parts) >= 4:
                     wid = parts[0]
                     title = parts[3]
+                    
+                    # Get app class name via xprop WM_CLASS (convert hex wmctrl ID to decimal)
+                    app_name = ""
+                    try:
+                        dec_id = str(int(wid, 16))
+                        class_result = subprocess.run(
+                            ["xprop", "-id", dec_id, "WM_CLASS"],
+                            capture_output=True, text=True, timeout=1
+                        )
+                        if class_result.returncode == 0 and "=" in class_result.stdout:
+                            import re
+                            names = re.findall(r'"([^"]*)"', class_result.stdout)
+                            if len(names) >= 2:
+                                app_name = names[1]
+                            elif len(names) == 1:
+                                app_name = names[0]
+                    except Exception:
+                        pass
+                    
                     windows.append(WindowInfo(
-                        window_id=wid,
+                        window_id=str(int(wid, 16)),  # Store as decimal for xdotool compat
                         title=title,
+                        app_name=app_name,
                         is_active=(wid == active_id)
                     ))
                     

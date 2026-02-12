@@ -36,6 +36,7 @@ RUN apt-get update && apt-get install -y \
     supervisor \
     # --- Useful apps for testing ---
     gedit \
+    mousepad \ 
     # --- Python environment ---
     python3 \
     python3-pip \

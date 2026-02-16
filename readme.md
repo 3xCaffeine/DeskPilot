@@ -22,8 +22,6 @@ docker exec -it deskpilot-desktop bash
 # Start Chrome with CDP
 DISPLAY=:99 /usr/local/bin/chrome-with-cdp &
 
-# Run tests
-python3 test_phase4.py
 ```
 
 ### Container Management

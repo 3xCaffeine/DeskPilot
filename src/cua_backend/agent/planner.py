@@ -88,17 +88,15 @@ class PlanNextAction(dspy.Signature):
     - BROWSER_TYPE(index, text) - Type into element at index (does NOT auto-submit)
     
     DO NOT use CSS selectors. ONLY use index numbers from interactive_elements list.
-    After typing in search box, you MUST submit by using PRESS_KEY(ENTER) or BROWSER_CLICK on submit button index.
-    Example: BROWSER_TYPE(5, "search query"); PRESS_KEY(ENTER) or BROWSER_TYPE(5, "query"); BROWSER_CLICK(7)
     
     GUIDELINES:
     1. Output a SEMICOLON-SEPARATED sequence of actions to save LLM calls.
     2. **SEQUENCE LENGTH POLICY**: Keep sequences short (MAX 5-8 actions). Do NOT try to complete complex tasks in one sequence. It is better to finish a sub-goal, verify, and then plan the next step.
-    3. **AUTOCOMPLETE/DROPDOWN POLICY**: When typing into elements marked [SEARCH_INPUT - ...] or any search box that triggers dropdowns (like city search, product search), you MUST STOP the sequence after typing.
-       - Output ONLY: BROWSER_TYPE(index, text) - nothing else in action_sequence.
-       - Reason should mention "waiting for dropdown/autocomplete to appear".
-       - Element indices CHANGE after typing (dropdown appears with new options).
-       - Next observation shows fresh dropdown options with NEW indices → then BROWSER_CLICK the correct option.
+    3. **AUTOCOMPLETE/DROPDOWN POLICY**: Elements marked [SEARCH_INPUT] or [DROPDOWN_OPTION] indicate an autocomplete flow.
+       - STEP A: When you see [SEARCH_INPUT], type into it: output ONLY BROWSER_TYPE(index, text). STOP. No more actions.
+       - STEP B: After typing, the next observation will show [DROPDOWN_OPTION] items. BROWSER_CLICK the one whose text best matches your search.
+       - NEVER type AND click in the same sequence for autocomplete inputs. Element indices CHANGE after typing.
+       - Example flow: Step 1: BROWSER_TYPE(5, "Tokyo") → Step 2: BROWSER_CLICK(8) where [8] is the [DROPDOWN_OPTION] for "Tokyo, Japan".
     4. **POPUP/MODAL HANDLING**: If you see elements with text like "Close", "Dismiss", "Accept", "×", or buttons that appear to be popup closers (usually at high indices, overlaying content), dismiss them FIRST before continuing. Try PRESS_KEY(ESCAPE) as safest option, or BROWSER_CLICK on close button index. Do NOT try to interact with content behind popups - close them first.
     5. **BROWSER PRIORITY**: When is_browser=True and interactive_elements are provided, ALWAYS use index-based BROWSER_* actions (BROWSER_NAVIGATE, BROWSER_CLICK(index), BROWSER_TYPE(index, text)). Never use TYPE or PRESS_KEY for web interactions - they are unreliable in browsers. Only use indices from the interactive_elements list.
     6. If the goal is reached, use the DONE action.

@@ -5,7 +5,7 @@ Handles navigation, clicking, typing in Chrome browser using index-based element
 from typing import Dict, Any
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeout
 
-from ..utils.constants import INTERACTIVE_SELECTOR
+from ..utils.constants import FIND_ELEMENTS_JS
 
 
 class BrowserController:
@@ -36,18 +36,14 @@ class BrowserController:
     async def click_element(self, index: int, timeout: int = 5000) -> Dict[str, Any]:
         """Click element by its index from the interactive elements list."""
         try:
-            clicked = await self._page.evaluate(f"""
-                (idx) => {{
-                    const sel = '{INTERACTIVE_SELECTOR}';
-                    const els = [...document.querySelectorAll(sel)].filter(el => {{
-                        const r = el.getBoundingClientRect();
-                        return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < window.innerHeight;
-                    }});
-                    if (idx >= els.length) return false;
-                    els[idx].click();
+            clicked = await self._page.evaluate(
+                "((idx) => {" + FIND_ELEMENTS_JS + """
+                    if (idx >= allEls.length) return false;
+                    allEls[idx].click();
                     return true;
-                }}
-            """, index)
+                })""",
+                index
+            )
             if not clicked:
                 return {"success": False, "error": f"Index {index} out of range"}
             
@@ -71,19 +67,15 @@ class BrowserController:
     async def type_into_element(self, index: int, text: str, timeout: int = 5000) -> Dict[str, Any]:
         """Click element by index to focus, then type text. Does NOT auto-submit."""
         try:
-            focused = await self._page.evaluate(f"""
-                (idx) => {{
-                    const sel = '{INTERACTIVE_SELECTOR}';
-                    const els = [...document.querySelectorAll(sel)].filter(el => {{
-                        const r = el.getBoundingClientRect();
-                        return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < window.innerHeight;
-                    }});
-                    if (idx >= els.length) return false;
-                    els[idx].focus();
-                    els[idx].click();
+            focused = await self._page.evaluate(
+                "((idx) => {" + FIND_ELEMENTS_JS + """
+                    if (idx >= allEls.length) return false;
+                    allEls[idx].focus();
+                    allEls[idx].click();
                     return true;
-                }}
-            """, index)
+                })""",
+                index
+            )
             if not focused:
                 return {"success": False, "error": f"Index {index} out of range"}
             await self._page.keyboard.type(text, delay=50)

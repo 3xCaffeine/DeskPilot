@@ -2,7 +2,7 @@
 browser_state.py - Chrome CDP State Extractor
 ==============================================
 Extracts page state from Chrome via CDP (Chrome DevTools Protocol).
-Gives agent "browser vision" - URL, focused elements, forms, etc.
+Gives agent "browser vision" - URL, focused elements, interactive elements, etc.
 """
 
 from __future__ import annotations
@@ -10,6 +10,8 @@ import asyncio
 from dataclasses import dataclass
 from typing import Optional, List
 from playwright.async_api import async_playwright, Browser, Page
+
+from ..utils.constants import INTERACTIVE_SELECTOR
 
 
 @dataclass
@@ -20,11 +22,50 @@ class BrowserState:
     is_loading: bool
     focused_element: Optional[dict] = None  # {tag, id, class, value, type}
     visible_text: str = ""  # Main content text
-    forms: List[dict] = None  # Detected forms with inputs
+    interactive_elements: List[dict] = None  # Visible clickable elements with indices
     
     def __post_init__(self):
-        if self.forms is None:
-            self.forms = []
+        if self.interactive_elements is None:
+            self.interactive_elements = []
+    
+    def format_elements_for_llm(self) -> str:
+        """Format interactive elements as a numbered list for the LLM."""
+        if not self.interactive_elements:
+            return "No interactive elements visible."
+        
+        # Common popup/modal close indicators
+        close_keywords = ['close', 'dismiss', 'accept', 'got it', 'ok', '×', '✕', 'x']
+        
+        lines = []
+        for el in self.interactive_elements:
+            tag = el['tag'].upper()
+            text = el['text'] or el['name'] or el['type'] or ''
+            extra = f' -> {el["href"]}' if el['href'] else ''
+            
+            # Detect potential popup close buttons
+            text_lower = text.lower().strip()
+            is_likely_close = (
+                text_lower in close_keywords or 
+                any(kw in text_lower for kw in ['close', 'dismiss', 'accept']) or
+                text.strip() in ['×', '✕', 'X']
+            )
+            
+            # Detect search inputs that might trigger autocomplete
+            is_search_input = (
+                tag in ['INPUT', 'TEXTAREA'] and
+                (el.get('type') == 'search' or 
+                 'search' in el.get('name', '').lower() or
+                 'search' in text_lower)
+            )
+            
+            marker = ''
+            if is_likely_close:
+                marker = ' [POPUP_CLOSER?]'
+            elif is_search_input:
+                marker = ' [SEARCH_INPUT - typing here triggers dropdown, stop sequence after!]'
+            
+            lines.append(f'[{el["index"]}] <{tag}> "{text}"{extra}{marker}')
+        return "\n".join(lines)
 
 
 class BrowserStateProvider:
@@ -96,8 +137,8 @@ class BrowserStateProvider:
             # Get visible text (simplified - just body text)
             visible_text = await self._page.evaluate("document.body.innerText || ''")
             
-            # Get forms
-            forms = await self._get_forms()
+            # Get interactive elements
+            interactive_elements = await self._get_interactive_elements()
             
             return BrowserState(
                 url=url,
@@ -105,7 +146,7 @@ class BrowserStateProvider:
                 is_loading=is_loading,
                 focused_element=focused,
                 visible_text=visible_text[:1000],  # Limit text
-                forms=forms
+                interactive_elements=interactive_elements
             )
         except Exception as e:
             print(f"Failed to get browser state: {e}")
@@ -132,26 +173,37 @@ class BrowserStateProvider:
         except:
             return None
     
-    async def _get_forms(self) -> List[dict]:
-        """Get all forms on the page."""
+    async def _get_interactive_elements(self) -> List[dict]:
+        """Extract visible interactive elements in viewport with indices."""
         try:
-            forms = await self._page.evaluate("""
-                () => {
-                    return Array.from(document.forms).map(form => ({
-                        id: form.id || null,
-                        action: form.action || null,
-                        inputs: Array.from(form.elements).map(el => ({
+            elements = await self._page.evaluate(f"""
+                () => {{
+                    const sel = '{INTERACTIVE_SELECTOR}';
+                    const els = document.querySelectorAll(sel);
+                    const results = [];
+                    let idx = 0;
+                    for (const el of els) {{
+                        const rect = el.getBoundingClientRect();
+                        if (rect.width === 0 || rect.height === 0) continue;
+                        if (rect.bottom < 0 || rect.top > window.innerHeight) continue;
+                        const text = (el.innerText || el.value || el.getAttribute('aria-label')
+                                      || el.getAttribute('placeholder') || el.title || '').trim().slice(0, 80);
+                        results.push({{
+                            index: idx,
                             tag: el.tagName.toLowerCase(),
-                            type: el.type || null,
-                            name: el.name || null,
-                            id: el.id || null,
-                            placeholder: el.placeholder || null
-                        }))
-                    }));
-                }
+                            role: el.getAttribute('role') || '',
+                            text: text,
+                            type: el.type || '',
+                            name: el.name || '',
+                            href: el.href || ''
+                        }});
+                        idx++;
+                    }}
+                    return results;
+                }}
             """)
-            return forms
-        except:
+            return elements
+        except Exception:
             return []
     
     async def is_on_search_engine(self) -> bool:

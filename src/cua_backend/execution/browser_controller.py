@@ -1,9 +1,11 @@
 """
 Browser Controller - CDP-based browser automation via Playwright
-Handles navigation, clicking, typing, form submission in Chrome browser.
+Handles navigation, clicking, typing in Chrome browser using index-based element targeting.
 """
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeout
+
+from ..utils.constants import INTERACTIVE_SELECTOR
 
 
 class BrowserController:
@@ -31,47 +33,65 @@ class BrowserController:
         except Exception as e:
             return {"success": False, "error": str(e)}
     
-    async def click_element(self, selector: str, timeout: int = 5000) -> Dict[str, Any]:
-        """Click element by CSS selector."""
+    async def click_element(self, index: int, timeout: int = 5000) -> Dict[str, Any]:
+        """Click element by its index from the interactive elements list."""
         try:
-            await self._page.click(selector, timeout=timeout)
-            return {"success": True, "selector": selector}
-        except PlaywrightTimeout:
-            return {"success": False, "error": f"Element not found: {selector}"}
+            clicked = await self._page.evaluate(f"""
+                (idx) => {{
+                    const sel = '{INTERACTIVE_SELECTOR}';
+                    const els = [...document.querySelectorAll(sel)].filter(el => {{
+                        const r = el.getBoundingClientRect();
+                        return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < window.innerHeight;
+                    }});
+                    if (idx >= els.length) return false;
+                    els[idx].click();
+                    return true;
+                }}
+            """, index)
+            if not clicked:
+                return {"success": False, "error": f"Index {index} out of range"}
+            
+            # Wait briefly for potential navigation
+            try:
+                await self._page.wait_for_load_state("domcontentloaded", timeout=2000)
+            except:
+                pass  # No navigation occurred, continue
+            
+            return {"success": True, "index": index}
         except Exception as e:
+            # Navigation errors during click are SUCCESS (means the click worked)
+            if "Execution context was destroyed" in str(e):
+                try:
+                    await self._page.wait_for_load_state("domcontentloaded", timeout=5000)
+                    return {"success": True, "index": index, "note": "Navigation occurred"}
+                except:
+                    return {"success": True, "index": index, "note": "Click triggered navigation"}
             return {"success": False, "error": str(e)}
     
-    async def type_into_element(self, selector: str, text: str, timeout: int = 5000) -> Dict[str, Any]:
-        """Type text into input element with visible typing animation, then press Enter."""
+    async def type_into_element(self, index: int, text: str, timeout: int = 5000) -> Dict[str, Any]:
+        """Click element by index to focus, then type text. Does NOT auto-submit."""
         try:
-            # Click the element first to focus it
-            await self._page.click(selector, timeout=timeout)
-            # Type with animation (slower but visible)
-            await self._page.type(selector, text, delay=50)
-            # Press Enter to submit
-            await self._page.press(selector, 'Enter')
-            return {"success": True, "selector": selector, "text_length": len(text)}
-        except PlaywrightTimeout:
-            return {"success": False, "error": f"Input not found: {selector}"}
+            focused = await self._page.evaluate(f"""
+                (idx) => {{
+                    const sel = '{INTERACTIVE_SELECTOR}';
+                    const els = [...document.querySelectorAll(sel)].filter(el => {{
+                        const r = el.getBoundingClientRect();
+                        return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < window.innerHeight;
+                    }});
+                    if (idx >= els.length) return false;
+                    els[idx].focus();
+                    els[idx].click();
+                    return true;
+                }}
+            """, index)
+            if not focused:
+                return {"success": False, "error": f"Index {index} out of range"}
+            await self._page.keyboard.type(text, delay=50)
+            return {"success": True, "index": index, "text_length": len(text)}
         except Exception as e:
-            return {"success": False, "error": str(e)}
-    
-    async def submit_form(self, selector: str, timeout: int = 5000) -> Dict[str, Any]:
-        """Submit form by selector (form or submit button)."""
-        try:
-            # Try to click submit button or press Enter on form
-            element = await self._page.query_selector(selector)
-            if not element:
-                return {"success": False, "error": f"Form not found: {selector}"}
-            
-            tag_name = await element.evaluate("el => el.tagName.toLowerCase()")
-            if tag_name == "form":
-                await element.evaluate("form => form.submit()")
-            else:
-                await element.click(timeout=timeout)
-            
-            return {"success": True, "selector": selector}
-        except Exception as e:
+            # Navigation during typing is OK
+            if "Execution context was destroyed" in str(e):
+                return {"success": True, "index": index, "note": "Navigation during typing"}
             return {"success": False, "error": str(e)}
     
     async def wait_for_navigation(self, timeout: int = 30000) -> Dict[str, Any]:
@@ -81,16 +101,6 @@ class BrowserController:
             return {"success": True, "url": self._page.url}
         except PlaywrightTimeout:
             return {"success": False, "error": f"Navigation timeout after {timeout}ms"}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-    
-    async def wait_for_selector(self, selector: str, timeout: int = 10000) -> Dict[str, Any]:
-        """Wait for element to appear."""
-        try:
-            await self._page.wait_for_selector(selector, timeout=timeout, state="visible")
-            return {"success": True, "selector": selector}
-        except PlaywrightTimeout:
-            return {"success": False, "error": f"Element did not appear: {selector}"}
         except Exception as e:
             return {"success": False, "error": str(e)}
     
@@ -108,16 +118,6 @@ class BrowserController:
         try:
             await self._page.keyboard.press(key)
             return {"success": True, "key": key}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-    
-    async def get_element_text(self, selector: str, timeout: int = 5000) -> Dict[str, Any]:
-        """Get text content from element."""
-        try:
-            text = await self._page.text_content(selector, timeout=timeout)
-            return {"success": True, "text": text or ""}
-        except PlaywrightTimeout:
-            return {"success": False, "error": f"Element not found: {selector}"}
         except Exception as e:
             return {"success": False, "error": str(e)}
     

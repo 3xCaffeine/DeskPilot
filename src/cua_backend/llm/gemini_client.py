@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 from PIL import Image
 
 try:
-    import google.generativeai as genai
+    import google.genai as genai
 except ImportError:
     genai = None
 

@@ -3,7 +3,7 @@
 This script intentionally bypasses DSPy/text planning and exercises ONLY the
 vision LLM calling path:
 
-  screenshot -> vision LLM -> one Action -> execute -> repeat
+screenshot -> vision LLM -> one Action -> execute -> repeat
 
 It is useful for verifying that Gemini/OpenRouter vision is correctly wired,
 that JSON parsing works, and that actions execute inside the Docker desktop.

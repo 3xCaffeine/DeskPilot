@@ -8,8 +8,8 @@ screenshot -> vision LLM -> one Action -> execute -> repeat
 It is useful for verifying that Gemini/OpenRouter vision is correctly wired,
 that JSON parsing works, and that actions execute inside the Docker desktop.
 
-Run (inside container):
-    python3 /app/scripts/vision_only.py "Open Chrome" --model "openrouter/google/gemini-2.0-flash-001"
+# Example usage (from repo root):
+docker exec -it deskpilot-desktop python3 /app/scripts/vision_only.py "Open Chrome" --model "openrouter/google/gemini-2.0-flash-001" --max-steps 10
 
 Notes:
 - It uses the same Action schema as the main agent.

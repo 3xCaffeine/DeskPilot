@@ -43,10 +43,10 @@ flowchart TD
      end
 
      subgraph Verify
-          Verify --> URLChanged
-          Verify --> FocusChanged
-          Verify --> TextPresent
-          Verify --> GoalSatisfied
+          VerifyChecks --> URLChanged
+          VerifyChecks --> FocusChanged
+          VerifyChecks --> TextPresent
+          VerifyChecks --> GoalSatisfied
      end
 ```
 └────┬───────────────┘

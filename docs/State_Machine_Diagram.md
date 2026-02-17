@@ -13,8 +13,8 @@ flowchart TD
     subgraph OBS["① OBSERVE — Build World Model"]
         ss["Take Screenshot"]
         dt["Read Window Title + App Class"]
-        bc{"Chrome is the\nactive window?"}
-        cdp["CDP: get URL, Interactive\nElements, Visible Text"]
+        bc{"Chrome is the<br/>active window?"}
+        cdp["CDP: get URL, Interactive<br/>Elements, Visible Text"]
         ts["Build combined Text State"]
 
         ss --> dt --> bc
@@ -22,13 +22,13 @@ flowchart TD
         bc -->|No| ts
     end
 
-    ts --> cc{"Quick check:\ngoal already done?"}
+    ts --> cc{"Quick check:<br/>goal already done?"}
     cc -->|"Yes"| Done
     cc -->|"No"| plan
 
     subgraph DEC["② DECIDE — Plan Next Actions"]
-        plan["DSPy Planner reads\nstate + history + goal"]
-        out["Output: action_sequence,\nexpected_anchor, success_indicators"]
+        plan["DSPy Planner reads<br/>state + history + goal"]
+        out["Output: action_sequence,<br/>expected_anchor, success_indicators"]
         par["Parse into Action objects"]
 
         plan --> out --> par
@@ -38,8 +38,8 @@ flowchart TD
 
     subgraph EXE["③ EXECUTE — Run Actions"]
         dispatch{"Action Type?"}
-        desk["Desktop via PyAutoGUI\nCLICK, TYPE, SCROLL,\nPRESS_KEY, WAIT"]
-        brw["Browser via CDP\nNAVIGATE, CLICK, TYPE\nusing element index"]
+        desk["Desktop via PyAutoGUI<br/>CLICK, TYPE, SCROLL,<br/>PRESS_KEY, WAIT"]
+        brw["Browser via CDP<br/>NAVIGATE, CLICK, TYPE<br/>using element index"]
 
         dispatch -->|"Desktop action"| desk
         dispatch -->|"Browser action"| brw
@@ -49,9 +49,9 @@ flowchart TD
     brw --> poll
 
     subgraph VER["④ VERIFY — Did It Work?"]
-        poll["Poll ~5 sec for anchor match\n(App class, Title, URL, Keywords)"]
-        found{"Anchor\nmatched?"}
-        si{"Success indicators\nfound on screen?"}
+        poll["Poll ~5 sec for anchor match<br/>(App class, Title, URL, Keywords)"]
+        found{"Anchor<br/>matched?"}
+        si{"Success indicators<br/>found on screen?"}
         ok["Step Verified"]
         nok["Not Verified"]
 
@@ -62,19 +62,19 @@ flowchart TD
         found -->|"No"| nok
     end
 
-    ok --> more{"More steps\nneeded?"}
+    ok --> more{"More steps<br/>needed?"}
     more -->|"Yes: next step"| ss
     more -->|"No: goal complete"| Done
 
-    nok --> retry{"Retry left?\n(max 2 per step)"}
+    nok --> retry{"Retry left?<br/>(max 2 per step)"}
     retry -->|"Yes"| dispatch
     retry -->|"Exhausted"| cdpv
 
     subgraph ESC["⑤ ESCALATE — Recovery"]
-        cdpv{"Chrome\nactive?"}
-        cdpchk["CDP Verify:\ncheck URL + page text"]
-        vis["Vision Fallback:\nscreenshot sent to\nGemini or OpenRouter"]
-        fix["Execute single\ncorrective action"]
+        cdpv{"Chrome<br/>active?"}
+        cdpchk["CDP Verify:<br/>check URL + page text"]
+        vis["Vision Fallback:<br/>screenshot sent to<br/>Gemini or OpenRouter"]
+        fix["Execute single<br/>corrective action"]
         ok2["Verified via CDP"]
 
         cdpv -->|"Yes"| cdpchk

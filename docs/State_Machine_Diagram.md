@@ -1,63 +1,54 @@
-┌──────────┐
-│  START   │
-└────┬─────┘
-     ↓
-┌────────────┐
-│ OBSERVE    │
-│ - Take SS  │  ← ALWAYS (logging only)
-│ - Read AX  │  Accessibility state
-│ - Window   │  title/focus/active app
-│ - Browser  │  CDP state (if Chrome active)
-│   • URL    │
-│   • Interactive elements (indexed)
-└────┬───────┘
-     ↓
-┌────────────────────┐
-│ DECIDE_ACTION      │
-│ (Planner - DSPy)   │
-│                    │
-│ Input:             │
-│ - Text state       │
-│ - Browser elements │
-│ - History          │
-│                    │
-│ Priority order:    │
-│ 1. Desktop actions │
-│ 2. Browser actions │
-│    (index-based)   │
-│ 3. Vision fallback │
-└────┬───────────────┘
-     ↓
-┌────────────────────┐
-│ EXECUTE_ACTION     │
-│ - Desktop:         │
-│   • Key press      │
-│   • Type           │
-│   • Wait           │
-│ - Browser (CDP):   │
-│   • Navigate(url)  │
-│   • Click(index)   │
-│   • Type(index, text)│
-└────┬───────────────┘
-     ↓
-┌────────────────────┐
-│ VERIFY             │
-│ - URL changed?     │
-│ - Focus changed?   │
-│ - Text present?    │
-│ - Goal satisfied?  │
-└────┬───────────────┘
-     │
-     ├── YES ───────────────▶ DONE
-     │
-     └── NO
-          ↓
-┌────────────────────┐
-│ ESCALATE           │
-│                    │
-│ If not used vision │
-│ → Vision Navigator │
-│ Else → Fail/Retry  │
+```mermaid
+flowchart TD
+     Start --> Observe
+     Observe --> Decide
+     Decide --> Execute
+     Execute --> Verify
+     Verify -->|Goal satisfied| Done
+     Verify -->|Not satisfied| Escalate
+     Escalate -->|Vision not used| VisionNavigator
+     Escalate -->|Vision used| FailRetry
+     VisionNavigator --> Execute
+     FailRetry --> Observe
+
+     subgraph Observe
+          Observe --> TakeSS
+          Observe --> ReadAX
+          Observe --> AccessibilityState
+          Observe --> WindowTitle
+          Observe --> FocusActiveApp
+          Observe --> BrowserCDP
+          BrowserCDP --> URL
+          BrowserCDP --> InteractiveElements
+     end
+
+     subgraph Decide
+          Decide --> PlannerDSPy
+          Decide --> TextState
+          Decide --> BrowserElements
+          Decide --> History
+          Decide --> PriorityOrder
+          PriorityOrder --> DesktopActions
+          PriorityOrder --> BrowserActions
+          PriorityOrder --> VisionFallback
+     end
+
+     subgraph Execute
+          Execute --> DesktopKeyPress
+          Execute --> DesktopType
+          Execute --> DesktopWait
+          Execute --> BrowserNavigate
+          Execute --> BrowserClick
+          Execute --> BrowserType
+     end
+
+     subgraph Verify
+          Verify --> URLChanged
+          Verify --> FocusChanged
+          Verify --> TextPresent
+          Verify --> GoalSatisfied
+     end
+```
 └────┬───────────────┘
      ↓
 (back to OBSERVE)

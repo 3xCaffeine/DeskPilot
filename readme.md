@@ -24,6 +24,12 @@ DISPLAY=:99 /usr/local/bin/chrome-with-cdp &
 
 ```
 
+### Example Command
+```bash
+# Run a specific task
+docker exec -it deskpilot-desktop python3 /app/run.py "Create a folder called documents and copy the file from docs into that newly created folder" --model "openrouter/google/gemini-2.0-flash-001"
+```
+
 ### Container Management
 ```bash
 # Stop container

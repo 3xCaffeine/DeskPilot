@@ -30,6 +30,19 @@ DISPLAY=:99 /usr/local/bin/chrome-with-cdp &
 docker exec -it deskpilot-desktop python3 /app/run.py "Create a folder called documents and copy the file from docs into that newly created folder" --model "openrouter/google/gemini-2.0-flash-001"
 ```
 
+### Vision-only Smoke Test (bypasses DSPy planner)
+
+Use this to verify that vision calling (Gemini/OpenRouter) works end-to-end:
+
+```bash
+# Vision-only loop: screenshot -> vision LLM -> one Action -> execute
+docker exec -it deskpilot-desktop python3 /app/scripts/vision_only.py "Open Chrome" --model "openrouter/google/gemini-2.0-flash-001" --max-steps 10
+```
+
+Notes:
+- Provider is inferred from `--model` (`openrouter/...` vs `gemini/...`).
+- Outputs are saved under `runs/<run_id>/vision_only/`.
+
 ### Container Management
 ```bash
 # Stop container

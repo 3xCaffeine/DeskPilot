@@ -29,6 +29,7 @@ class TextState:
     focused_element: str = ""  # role + label if available
     current_url: Optional[str] = None  # Browser URL if active
     is_browser: bool = False  # True if Chrome is active window
+    interactive_elements: str = ""  # Indexed list of clickable elements
     
 
 @dataclass
@@ -51,7 +52,7 @@ class PlannerOutput:
     """Structured decision from the planner."""
     action_type: Literal[
         "PRESS_KEY", "TYPE", "WAIT", "DONE", "FAIL", "CLICK", "SCROLL",
-        "BROWSER_NAVIGATE", "BROWSER_CLICK", "BROWSER_TYPE", "BROWSER_SUBMIT", "BROWSER_WAIT"
+        "BROWSER_NAVIGATE", "BROWSER_CLICK", "BROWSER_TYPE"
     ]
     action_param: str = ""  # key name, text to type, or seconds
     expected_window_title: str = "" # Anchor for local verification
@@ -81,34 +82,39 @@ class PlanNextAction(dspy.Signature):
     - Step 2: Search for Y on X (success_indicators: "Y, search results")
     - "search [site]" = BROWSER_NAVIGATE([site].com), NOT searching for site name in Google
     
-    BROWSER CDP ACTIONS (when is_browser=True):
+    BROWSER CDP ACTIONS (when is_browser=True and interactive_elements provided):
     - BROWSER_NAVIGATE(url) - Navigate directly to URL
-    - BROWSER_TYPE(selector, text) - Type text into element matching selector
-    - BROWSER_CLICK(selector) - Click element
-    - BROWSER_WAIT(selector) - Wait for element
+    - BROWSER_CLICK(index) - Click element at index (e.g., BROWSER_CLICK(3) clicks [3])
+    - BROWSER_TYPE(index, text) - Type into element at index (does NOT auto-submit)
     
-    After typing in search box, you must submit (PRESS_KEY(ENTER) or BROWSER_CLICK on submit button).
+    DO NOT use CSS selectors. ONLY use index numbers from interactive_elements list.
     
     GUIDELINES:
     1. Output a SEMICOLON-SEPARATED sequence of actions to save LLM calls.
     2. **SEQUENCE LENGTH POLICY**: Keep sequences short (MAX 5-8 actions). Do NOT try to complete complex tasks in one sequence. It is better to finish a sub-goal, verify, and then plan the next step.
-    3. **BROWSER PRIORITY**: When is_browser=True, ALWAYS use BROWSER_* actions (BROWSER_NAVIGATE, BROWSER_TYPE, BROWSER_CLICK). Never use TYPE or PRESS_KEY for web interactions - they are unreliable in browsers.
-    4. If the goal is reached, use the DONE action.
-    5. **ANTI-LOOP POLICY**: If history shows REPEATED FAILURES (same action failing 2+ times), you are STUCK. Use recovery:
+    3. **AUTOCOMPLETE/DROPDOWN POLICY**: Elements marked [SEARCH_INPUT] or [DROPDOWN_OPTION] indicate an autocomplete flow.
+       - STEP A: When you see [SEARCH_INPUT], type into it: output ONLY BROWSER_TYPE(index, text). STOP. No more actions.
+       - STEP B: After typing, the next observation will show [DROPDOWN_OPTION] items. BROWSER_CLICK the one whose text best matches your search.
+       - NEVER type AND click in the same sequence for autocomplete inputs. Element indices CHANGE after typing.
+       - Example flow: Step 1: BROWSER_TYPE(5, "Tokyo") → Step 2: BROWSER_CLICK(8) where [8] is the [DROPDOWN_OPTION] for "Tokyo, Japan".
+    4. **POPUP/MODAL HANDLING**: If you see elements with text like "Close", "Dismiss", "Accept", "×", or buttons that appear to be popup closers (usually at high indices, overlaying content), dismiss them FIRST before continuing. Try PRESS_KEY(ESCAPE) as safest option, or BROWSER_CLICK on close button index. Do NOT try to interact with content behind popups - close them first.
+    5. **BROWSER PRIORITY**: When is_browser=True and interactive_elements are provided, ALWAYS use index-based BROWSER_* actions (BROWSER_NAVIGATE, BROWSER_CLICK(index), BROWSER_TYPE(index, text)). Never use TYPE or PRESS_KEY for web interactions - they are unreliable in browsers. Only use indices from the interactive_elements list.
+    6. If the goal is reached, use the DONE action.
+    7. **ANTI-LOOP POLICY**: If history shows REPEATED FAILURES (same action failing 2+ times), you are STUCK. Use recovery:
        - Browser stuck? Use BROWSER_NAVIGATE to go back to the target site
        - Wrong page? Check current_url and navigate directly: BROWSER_NAVIGATE(correctsite.com)
-       - Can't find element? Try alternative selectors or escalate: needs_vision=True
+       - Can't find element? Scroll to reveal more elements (SCROLL) or escalate: needs_vision=True
        DO NOT repeat the same failing action more than twice.
-    6. GOAL DECOMPOSITION: Break down the main goal into 3-5 sub_goals. Each sub_goal must be a specific, verifiable state (e.g. 'Firefox Opened', 'Search results loaded', 'article page active').
-    7. **CRITICAL COMPLETION POLICY**: ONLY set 'success_indicators' when the FINAL step that completes the ENTIRE goal is being executed.
+    8. GOAL DECOMPOSITION: Break down the main goal into 3-5 sub_goals. Each sub_goal must be a specific, verifiable state (e.g. 'Firefox Opened', 'Search results loaded', 'article page active').
+    9. **CRITICAL COMPLETION POLICY**: ONLY set 'success_indicators' when the FINAL step that completes the ENTIRE goal is being executed.
        - Opening apps, navigating to sites → success_indicators: "" (ALWAYS EMPTY for intermediate steps)
        - Only the LAST action that fulfills the goal → success_indicators: "expected content keywords"
        - Multi-part goals: Each sub-goal except the final one has EMPTY success_indicators
-    8. WEB BEHAVIOR: Search results are INTERMEDIATE. If the user asks for 'info' or 'scrape', you MUST navigate into a specific website. Do NOT use DONE on a Google/Bing/Search result page. Use Vision fallback if you need to click a specific link.
-    9. **SOFT ANCHORS**: Use GENERIC 'expected_window_title' like 'Google Chrome' NOT specific sites like 'Amazon.com' - page titles are dynamic and will cause false mismatches.
-    10. **DIALOG TIMING**: Transition windows like "Save As" or "Open File" appear slowly. Always include a WAIT(1) after the trigger key (Ctrl+S, Ctrl+O) and before typing the filename.
-    11. **ABSOLUTE PATHS**: In Thunar, ALWAYS use File Path Navigation (Ctrl+L) to go to specific folders (e.g., '/app/docs'). Do NOT rely on clicking folders in the view as they might be hidden. The base path is ALWAYS /app, not /home/user.
-    12. **LAUNCHER RECOVERY**: If the window title is "app" or "application finder" after you sent ENTER, the launcher is stuck on top. Use PRESS_KEY("ESCAPE") and WAIT(1) to clear it. Do NOT try to use Alt+F2 again in the same sequence. Stop after ESCAPE so you can see if the target app was actually launched behind it.
+    10. WEB BEHAVIOR: Search results are INTERMEDIATE. If the user asks for 'info' or 'scrape', you MUST navigate into a specific website. Do NOT use DONE on a Google/Bing/Search result page. Use Vision fallback if you need to click a specific link.
+    11. **SOFT ANCHORS**: Use GENERIC 'expected_window_title' like 'Google Chrome' NOT specific sites like 'Amazon.com' - page titles are dynamic and will cause false mismatches.
+    12. **DIALOG TIMING**: Transition windows like "Save As" or "Open File" appear slowly. Always include a WAIT(1) after the trigger key (Ctrl+S, Ctrl+O) and before typing the filename.
+    13. **ABSOLUTE PATHS**: In Thunar, ALWAYS use File Path Navigation (Ctrl+L) to go to specific folders (e.g., '/app/docs'). Do NOT rely on clicking folders in the view as they might be hidden. The base path is ALWAYS /app, not /home/user.
+    14. **LAUNCHER RECOVERY**: If the window title is "app" or "application finder" after you sent ENTER, the launcher is stuck on top. Use PRESS_KEY("ESCAPE") and WAIT(1) to clear it. Do NOT try to use Alt+F2 again in the same sequence. Stop after ESCAPE so you can see if the target app was actually launched behind it.
     """
     
     # Inputs
@@ -121,6 +127,7 @@ class PlanNextAction(dspy.Signature):
     current_url: str = dspy.InputField(desc="Current browser URL (if in Chrome, otherwise empty)")
     is_browser: bool = dspy.InputField(desc="True if currently in Chrome browser")
     focused_element: str = dspy.InputField(desc="Currently focused input element (if any)")
+    interactive_elements: str = dspy.InputField(desc="Indexed list of clickable elements: [1] <A> 'Link', [2] <BUTTON> 'Submit' (browser only)")
     
     # Outputs
     action_sequence: str = dspy.OutputField(desc="Semicolon-separated actions. Use BROWSER_NAVIGATE to go to websites when is_browser=True.")
@@ -173,6 +180,7 @@ class ActionPlanner(dspy.Module):
             current_url=inp.text_state.current_url or "",
             is_browser=inp.text_state.is_browser,
             focused_element=inp.text_state.focused_element or "",
+            interactive_elements=inp.text_state.interactive_elements or "",
         )
         
         return PlannerOutput(
@@ -250,8 +258,7 @@ def parse_actions(output: PlannerOutput) -> list:
     """
     from ..schemas.actions import (
         PressKeyAction, TypeAction, WaitAction, DoneAction, FailAction, ScrollAction,
-        BrowserNavigateAction, BrowserClickAction, BrowserTypeAction, 
-        BrowserSubmitAction, BrowserWaitAction, Action
+        BrowserNavigateAction, BrowserClickAction, BrowserTypeAction, Action
     )
     
     actions = []
@@ -291,18 +298,18 @@ def parse_actions(output: PlannerOutput) -> list:
                 url = cleaned_params[0] if cleaned_params else ""
                 actions.append(BrowserNavigateAction(url=url, reason=output.reason))
             elif a_type == "BROWSER_CLICK":
-                selector = cleaned_params[0] if cleaned_params else ""
-                actions.append(BrowserClickAction(selector=selector, reason=output.reason))
+                try:
+                    index = int(cleaned_params[0]) if cleaned_params else 0
+                    actions.append(BrowserClickAction(element_index=index, reason=output.reason))
+                except ValueError:
+                    pass  # Skip invalid index
             elif a_type == "BROWSER_TYPE":
-                selector = cleaned_params[0] if len(cleaned_params) > 0 else ""
-                text = cleaned_params[1] if len(cleaned_params) > 1 else ""
-                actions.append(BrowserTypeAction(selector=selector, text=text, reason=output.reason))
-            elif a_type == "BROWSER_SUBMIT":
-                selector = cleaned_params[0] if cleaned_params else ""
-                actions.append(BrowserSubmitAction(selector=selector, reason=output.reason))
-            elif a_type == "BROWSER_WAIT":
-                selector = cleaned_params[0] if cleaned_params else ""
-                actions.append(BrowserWaitAction(selector=selector, reason=output.reason))
+                try:
+                    index = int(cleaned_params[0]) if len(cleaned_params) > 0 else 0
+                    text = cleaned_params[1] if len(cleaned_params) > 1 else ""
+                    actions.append(BrowserTypeAction(element_index=index, text=text, reason=output.reason))
+                except ValueError:
+                    pass  # Skip invalid index
             continue
         
         # Regular desktop actions

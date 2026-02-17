@@ -131,6 +131,9 @@ ENV DISPLAY=:99
 # (We're in a container, no need for this safety)
 ENV PYAUTOGUI_FAILSAFE=False
 
+# Suppress Node.js deprecation warnings globally
+ENV NODE_NO_WARNINGS=1
+
 # Copy our supervisor config
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 

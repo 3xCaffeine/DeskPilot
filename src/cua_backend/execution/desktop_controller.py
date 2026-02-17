@@ -56,8 +56,6 @@ from ..schemas.actions import (
     BrowserNavigateAction,
     BrowserClickAction,
     BrowserTypeAction,
-    BrowserSubmitAction,
-    BrowserWaitAction,
 )
 
 
@@ -146,9 +144,7 @@ class DesktopController(Executor):
                 return ExecutionResult(ok=False, error=action.error)
             
             # Browser actions - route to CDP controller
-            elif isinstance(action, (BrowserNavigateAction, BrowserClickAction, 
-                                     BrowserTypeAction, BrowserSubmitAction, 
-                                     BrowserWaitAction)):
+            elif isinstance(action, (BrowserNavigateAction, BrowserClickAction, BrowserTypeAction)):
                 return self._handle_browser_action(action)
                 
             else:
@@ -213,13 +209,9 @@ class DesktopController(Executor):
         if isinstance(action, BrowserNavigateAction):
             return await controller.navigate(action.url)
         elif isinstance(action, BrowserClickAction):
-            return await controller.click_element(action.selector)
+            return await controller.click_element(action.element_index)
         elif isinstance(action, BrowserTypeAction):
-            return await controller.type_into_element(action.selector, action.text)
-        elif isinstance(action, BrowserSubmitAction):
-            return await controller.submit_form(action.selector)
-        elif isinstance(action, BrowserWaitAction):
-            return await controller.wait_for_selector(action.selector)
+            return await controller.type_into_element(action.element_index, action.text)
         
         return {"success": False, "error": "Unknown browser action"}
     
@@ -381,6 +373,7 @@ class DesktopController(Executor):
             if browser_state:
                 state["current_url"] = browser_state.url
                 state["is_browser"] = True
+                state["interactive_elements"] = browser_state.format_elements_for_llm()
                 if browser_state.focused_element:
                     state["focused_element"] = str(browser_state.focused_element)
         

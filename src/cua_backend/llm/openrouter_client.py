@@ -87,6 +87,7 @@ class OpenRouterClient(LLMClient):
         # Parse result
         try:
             import json
+            from ..schemas.actions import FailAction
             content = response.choices[0].message.content
             if not content:
                 return FailAction(error="Vision model returned empty content", reason="Empty response")

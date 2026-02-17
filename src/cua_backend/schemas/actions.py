@@ -59,23 +59,14 @@ class BrowserNavigateAction(ActionBase):
 
 class BrowserClickAction(ActionBase):
     type: Literal["BROWSER_CLICK"] = "BROWSER_CLICK"
-    selector: str = Field(description="CSS selector for element to click")
+    element_index: int = Field(description="Index of element from interactive elements list")
 
 
 class BrowserTypeAction(ActionBase):
     type: Literal["BROWSER_TYPE"] = "BROWSER_TYPE"
-    selector: str = Field(description="CSS selector for input element")
+    element_index: int = Field(description="Index of input element from interactive elements list")
     text: str = Field(min_length=1)
 
-
-class BrowserSubmitAction(ActionBase):
-    type: Literal["BROWSER_SUBMIT"] = "BROWSER_SUBMIT"
-    selector: str = Field(description="CSS selector for form or submit button")
-
-
-class BrowserWaitAction(ActionBase):
-    type: Literal["BROWSER_WAIT"] = "BROWSER_WAIT"
-    selector: str = Field(description="CSS selector to wait for")
 
 
 # Union type (the LLM must return ONE of these)
@@ -90,6 +81,4 @@ Action = Union[
     BrowserNavigateAction,
     BrowserClickAction,
     BrowserTypeAction,
-    BrowserSubmitAction,
-    BrowserWaitAction,
 ]

@@ -10,41 +10,54 @@ flowchart TD
     Escalate --> VisionNavigator
     Escalate --> FailRetry
 
-    subgraph Observe
-        Observe --> TakeSS
-        Observe --> ReadAX
-        Observe --> AccessibilityState
-        Observe --> WindowTitle
-        Observe --> FocusActiveApp
-        Observe --> BrowserCDP
+    subgraph OBSERVE_PHASE
+        TakeSS
+        ReadAX
+        AccessibilityState
+        WindowTitle
+        FocusActiveApp
+        BrowserCDP
+        URL
+        InteractiveElements
+
         BrowserCDP --> URL
         BrowserCDP --> InteractiveElements
     end
 
-    subgraph Decide
-        Decide --> PlannerDSPy
-        Decide --> TextState
-        Decide --> BrowserElements
-        Decide --> History
-        Decide --> PriorityOrder
+    subgraph DECIDE_PHASE
+        PlannerDSPy
+        TextState
+        BrowserElements
+        History
+        PriorityOrder
+        DesktopActions
+        BrowserActions
+        VisionFallback
+
         PriorityOrder --> DesktopActions
         PriorityOrder --> BrowserActions
         PriorityOrder --> VisionFallback
     end
 
-    subgraph Execute
-        Execute --> DesktopKeyPress
-        Execute --> DesktopType
-        Execute --> DesktopWait
-        Execute --> BrowserNavigate
-        Execute --> BrowserClick
-        Execute --> BrowserType
+    subgraph EXECUTE_PHASE
+        DesktopKeyPress
+        DesktopType
+        DesktopWait
+        BrowserNavigate
+        BrowserClick
+        BrowserType
     end
 
-    subgraph Verify
-        VerifyChecks --> URLChanged
-        VerifyChecks --> FocusChanged
-        VerifyChecks --> TextPresent
-        VerifyChecks --> GoalSatisfied
+    subgraph VERIFY_PHASE
+        URLChanged
+        FocusChanged
+        TextPresent
+        GoalSatisfied
     end
+
+    Verify --> URLChanged
+    Verify --> FocusChanged
+    Verify --> TextPresent
+    Verify --> GoalSatisfied
+
 ```

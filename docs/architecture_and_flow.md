@@ -413,40 +413,40 @@ These rules exist because indices often become stale after intermediate DOM upda
 
 ```mermaid
 flowchart TD
-    U[User goal via CLI] --> CLI[run.py -> cua_backend/app/main.py]
-    CLI --> A[Agent.run]
+    user_goal --> cli_entry
+    cli_entry --> agent_run
 
-    subgraph Observe[OBSERVE]
-        A --> SS[DesktopController.screenshot]
-        A --> TS[DesktopController.get_text_state]
-        TS -->|xdotool/xprop/wmctrl| X11[X11 window state]
-        TS -->|if Chrome active| CDPState[BrowserStateProvider.get_state]
-        CDPState -->|url + interactive_elements| TS
+    subgraph OBSERVE
+        agent_run --> screenshot
+        agent_run --> text_state
+        text_state --> x11_state
+        text_state --> cdp_state
+        cdp_state --> text_state
     end
 
-    subgraph Decide[DECIDE]
-        A --> P[Planner.decide (DSPy)]
-        P --> Seq[PlannerOutput.action_sequence]
-        Seq --> Parse[parse_actions -> Action objects]
+    subgraph DECIDE
+        agent_run --> planner_decide
+        planner_decide --> action_sequence
+        action_sequence --> action_parse
     end
 
-    subgraph Execute[EXECUTE]
-        A --> DC[DesktopController.execute]
-        DC -->|desktop actions| PyA[PyAutoGUI -> Xvfb :99]
-        DC -->|browser actions| BC[BrowserController via CDP]
+    subgraph EXECUTE
+        agent_run --> desktop_execute
+        desktop_execute --> pyautogui_xvfb
+        desktop_execute --> browser_cdp
     end
 
-    subgraph Verify[VERIFY]
-        A --> Anch{Anchor match?}
-        Anch -->|poll title/app/url| OK[Step success]
-        Anch -->|no| Esc[ESCALATE]
+    subgraph VERIFY
+        agent_run --> anchor_match
+        anchor_match --> step_success
+        anchor_match --> escalate
     end
 
-    subgraph Escalate[ESCALATE]
-        Esc -->|browser? check url/text| CDPVerif[CDP verification]
-        CDPVerif -->|still no| Vision[Vision LLM (Gemini/OpenRouter)]
-        Vision --> One[One corrective Action]
-        One --> DC
+    subgraph ESCALATE
+        escalate --> cdp_verify
+        cdp_verify --> vision_llm
+        vision_llm --> corrective_action
+        corrective_action --> desktop_execute
     end
 ```
 

@@ -413,7 +413,7 @@ These rules exist because indices often become stale after intermediate DOM upda
 
 ```mermaid
 flowchart TD
-    U[User goal via CLI] --> CLI[run.py → cua_backend/app/main.py]
+    U[User goal via CLI] --> CLI[run.py -> cua_backend/app/main.py]
     CLI --> A[Agent.run]
 
     subgraph Observe[OBSERVE]
@@ -427,12 +427,12 @@ flowchart TD
     subgraph Decide[DECIDE]
         A --> P[Planner.decide (DSPy)]
         P --> Seq[PlannerOutput.action_sequence]
-        Seq --> Parse[parse_actions → Action objects]
+        Seq --> Parse[parse_actions -> Action objects]
     end
 
     subgraph Execute[EXECUTE]
         A --> DC[DesktopController.execute]
-        DC -->|desktop actions| PyA[PyAutoGUI → Xvfb :99]
+        DC -->|desktop actions| PyA[PyAutoGUI -> Xvfb :99]
         DC -->|browser actions| BC[BrowserController via CDP]
     end
 

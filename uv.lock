@@ -335,6 +335,7 @@ dependencies = [
     { name = "playwright" },
     { name = "pyautogui" },
     { name = "pydantic" },
+    { name = "pytesseract" },
     { name = "pyyaml" },
 ]
 
@@ -349,6 +350,7 @@ requires-dist = [
     { name = "playwright", specifier = ">=1.40.0" },
     { name = "pyautogui" },
     { name = "pydantic", specifier = ">=2.12.5" },
+    { name = "pytesseract", specifier = ">=0.3.13" },
     { name = "pyyaml" },
 ]
 
@@ -2050,6 +2052,19 @@ dependencies = [
     { name = "pillow", marker = "python_full_version < '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ee/f0/cb456ac4f1a73723d5b866933b7986f02bacea27516629c00f8e7da94c2d/pyscreeze-1.0.1.tar.gz", hash = "sha256:cf1662710f1b46aa5ff229ee23f367da9e20af4a78e6e365bee973cad0ead4be", size = 27826, upload-time = "2024-08-20T23:03:07.291Z" }
+
+[[package]]
+name = "pytesseract"
+version = "0.3.13"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "packaging" },
+    { name = "pillow" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/9f/a6/7d679b83c285974a7cb94d739b461fa7e7a9b17a3abfd7bf6cbc5c2394b0/pytesseract-0.3.13.tar.gz", hash = "sha256:4bf5f880c99406f52a3cfc2633e42d9dc67615e69d8a509d74867d3baddb5db9", size = 17689, upload-time = "2024-08-16T02:33:56.762Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7a/33/8312d7ce74670c9d39a532b2c246a853861120486be9443eebf048043637/pytesseract-0.3.13-py3-none-any.whl", hash = "sha256:7a99c6c2ac598360693d83a416e36e0b33a67638bb9d77fdcac094a3589d4b34", size = 14705, upload-time = "2024-08-16T02:36:10.09Z" },
+]
 
 [[package]]
 name = "python-dotenv"

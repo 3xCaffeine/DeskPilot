@@ -11,6 +11,6 @@ wheels/
 
 .env
 
-/docs
+
 /runs
 /.vscode

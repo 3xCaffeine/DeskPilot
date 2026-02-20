@@ -30,6 +30,8 @@ class TextState:
     current_url: Optional[str] = None  # Browser URL if active
     is_browser: bool = False  # True if Chrome is active window
     interactive_elements: str = ""  # Indexed list of clickable elements
+    home_dir: str = "/root"  # Actual home directory in this environment
+    desktop_path: str = "/root/Desktop"  # Actual Desktop path in this environment
     
 
 @dataclass
@@ -72,8 +74,8 @@ class PlanNextAction(dspy.Signature):
     Decide the next sequence of actions to achieve the goal using accessibility-first principles.
     
     STANDARD SKILLS:
-    - Open App: PRESS_KEY("ESCAPE"); WAIT(0.5); PRESS_KEY("Alt+F2"); WAIT(1.5); TYPE("app-name"); PRESS_KEY("ENTER")
-    - File Path Navigation: PRESS_KEY("Ctrl+L"); WAIT(1); TYPE("/app/path"); PRESS_KEY("ENTER"); WAIT(1) (MANDATORY for finding files)
+    - Open App: PRESS_KEY("ESCAPE"); WAIT(0.5); PRESS_KEY("Alt+F2"); WAIT(1.5); TYPE("<bin_name>"); PRESS_KEY("ENTER") (CRITICAL: Look up exact <bin_name> in 'app_knowledge'!)
+    - File Path Navigation: PRESS_KEY("Ctrl+L"); WAIT(1); TYPE("<path>"); PRESS_KEY("ENTER"); WAIT(1) (MANDATORY for finding files. Use 'desktop_path' from state for Desktop, or the exact path the user specified.)
     - File/Save Dialogs: PRESS_KEY("Ctrl+S"); WAIT(1); TYPE("filename"); PRESS_KEY("ENTER") (CRITICAL: Always WAIT after Ctrl+S/Ctrl+O)
     
     **CRITICAL TASK PARSING**:
@@ -113,8 +115,9 @@ class PlanNextAction(dspy.Signature):
     10. WEB BEHAVIOR: Search results are INTERMEDIATE. If the user asks for 'info' or 'scrape', you MUST navigate into a specific website. Do NOT use DONE on a Google/Bing/Search result page. Use Vision fallback if you need to click a specific link.
     11. **SOFT ANCHORS**: Use GENERIC 'expected_window_title' like 'Google Chrome' NOT specific sites like 'Amazon.com' - page titles are dynamic and will cause false mismatches.
     12. **DIALOG TIMING**: Transition windows like "Save As" or "Open File" appear slowly. Always include a WAIT(1) after the trigger key (Ctrl+S, Ctrl+O) and before typing the filename.
-    13. **ABSOLUTE PATHS**: In Thunar, ALWAYS use File Path Navigation (Ctrl+L) to go to specific folders (e.g., '/app/docs'). Do NOT rely on clicking folders in the view as they might be hidden. The base path is ALWAYS /app, not /home/user.
+    13. **ABSOLUTE PATHS**: In Thunar, ALWAYS use File Path Navigation (Ctrl+L) to go to specific folders. Do NOT rely on clicking folders in the view as they might be hidden. The Desktop is at 'desktop_path' (from state). For terminal commands targeting the Desktop, use the 'desktop_path' value directly. Never assume a fixed path — always use what is provided in state.
     14. **LAUNCHER RECOVERY**: If the window title is "app" or "application finder" after you sent ENTER, the launcher is stuck on top. Use PRESS_KEY("ESCAPE") and WAIT(1) to clear it. Do NOT try to use Alt+F2 again in the same sequence. Stop after ESCAPE so you can see if the target app was actually launched behind it.
+    15. **BINARY NAMES**: ALWAYS look up the application in `app_knowledge`. Use the exact `bin` name provided (e.g., if knowledge says 'terminal' -> 'bin: xfce4-terminal', you MUST type 'xfce4-terminal'). NEVER guess.
     """
     
     # Inputs
@@ -128,6 +131,8 @@ class PlanNextAction(dspy.Signature):
     is_browser: bool = dspy.InputField(desc="True if currently in Chrome browser")
     focused_element: str = dspy.InputField(desc="Currently focused input element (if any)")
     interactive_elements: str = dspy.InputField(desc="Indexed list of clickable elements: [1] <A> 'Link', [2] <BUTTON> 'Submit' (browser only)")
+    home_dir: str = dspy.InputField(desc="Actual home directory path (e.g. /root). Use this for ~ expansion.")
+    desktop_path: str = dspy.InputField(desc="Actual Desktop directory path (e.g. /root/Desktop). ALWAYS use this when the goal refers to the Desktop.")
     
     # Outputs
     action_sequence: str = dspy.OutputField(desc="Semicolon-separated actions. Use BROWSER_NAVIGATE to go to websites when is_browser=True.")
@@ -155,12 +160,13 @@ class ActionPlanner(dspy.Module):
     def _load_knowledge(self) -> str:
         try:
             import yaml
-            import os
             from pathlib import Path
-            path = Path("configs/xfce_apps.yaml")
+            # Resolve relative to repo root (3 levels up from this file: agent/ -> cua_backend/ -> src/ -> root)
+            root = Path(__file__).resolve().parent.parent.parent.parent
+            path = root / "configs" / "xfce_apps.yaml"
             if path.exists():
                 with open(path, "r") as f:
-                    return str(yaml.safe_load(f))
+                    return f.read() # Return raw YAML string
             return "No app knowledge available."
         except:
             return "No app knowledge available."
@@ -181,6 +187,8 @@ class ActionPlanner(dspy.Module):
             is_browser=inp.text_state.is_browser,
             focused_element=inp.text_state.focused_element or "",
             interactive_elements=inp.text_state.interactive_elements or "",
+            home_dir=inp.text_state.home_dir,
+            desktop_path=inp.text_state.desktop_path,
         )
         
         return PlannerOutput(
@@ -251,22 +259,134 @@ class Planner:
 
 import re
 
+
+def _smart_split(s: str) -> list:
+    """
+    Split a semicolon-separated action sequence, but only on semicolons
+    that are at the top level — NOT inside parentheses or quote strings.
+
+    This prevents shell commands like
+        TYPE(for file in *; do echo Hello > $file; done)
+    from being torn apart at every inner semicolon.
+    """
+    parts: list[str] = []
+    depth = 0
+    in_single = False
+    in_double = False
+    current: list[str] = []
+
+    for ch in s:
+        if ch == "'" and not in_double:
+            in_single = not in_single
+            current.append(ch)
+        elif ch == '"' and not in_single:
+            in_double = not in_double
+            current.append(ch)
+        elif ch == '(' and not in_single and not in_double:
+            depth += 1
+            current.append(ch)
+        elif ch == ')' and not in_single and not in_double:
+            depth -= 1
+            current.append(ch)
+        elif ch == ';' and depth == 0 and not in_single and not in_double:
+            parts.append(''.join(current))
+            current = []
+        else:
+            current.append(ch)
+
+    if current:
+        parts.append(''.join(current))
+
+    return parts
+
+
+def _parse_repr_action(class_name: str, params_str: str, reason: str):
+    """
+    Parse the Python-repr format that DSPy sometimes emits, e.g.
+        TypeAction(type='TYPE', reason='...', text='for file in *; do echo Hello > $file; done')
+        PressKeyAction(type='PRESS_KEY', reason='...', key='ENTER')
+
+    Returns an Action object or None when the class name is unrecognised.
+    """
+    from ..schemas.actions import (
+        PressKeyAction, TypeAction, WaitAction, DoneAction, FailAction
+    )
+
+    def _extract(field: str, s: str) -> str:
+        """Return the value for 'field=...' handling both quote styles."""
+        # Try field='value' (single quotes)
+        m = re.search(rf"{re.escape(field)}='((?:[^'\\]|\\.)*)'", s)
+        if m:
+            return m.group(1)
+        # Try field="value" (double quotes)
+        m = re.search(rf'{re.escape(field)}="((?:[^"\\]|\\.)*)"', s)
+        if m:
+            return m.group(1)
+        return ""
+
+    cn = class_name.lower()
+
+    if cn == "typeaction":
+        text = _extract("text", params_str)
+        if text:
+            return TypeAction(text=text, reason=reason)
+    elif cn == "presskeyaction":
+        key = _extract("key", params_str)
+        if key:
+            return PressKeyAction(key=key, reason=reason)
+    elif cn == "waitaction":
+        seconds_str = _extract("seconds", params_str)
+        try:
+            return WaitAction(seconds=float(seconds_str), reason=reason)
+        except (ValueError, TypeError):
+            return WaitAction(seconds=1.0, reason=reason)
+    elif cn == "doneaction":
+        final = _extract("final_answer", params_str) or "Goal reached"
+        return DoneAction(final_answer=final, reason=reason)
+    elif cn == "failaction":
+        error = _extract("error", params_str) or "Task failed"
+        return FailAction(error=error, reason=reason)
+    elif cn == "scrollaction":
+        from ..schemas.actions import ScrollAction
+        amount_str = _extract("amount", params_str)
+        try:
+            return ScrollAction(amount=int(amount_str), reason=reason)
+        except (ValueError, TypeError):
+            return ScrollAction(amount=-10, reason=reason)
+
+    return None
+
+
 def parse_actions(output: PlannerOutput) -> list:
     """
     Parses a sequence string like 'PRESS_KEY(Alt+F2); TYPE(firefox)'
     into a list of Action objects.
+
+    Also handles the Python-repr format that DSPy sometimes emits:
+        TypeAction(type='TYPE', text='...'); PressKeyAction(key='ENTER')
     """
     from ..schemas.actions import (
         PressKeyAction, TypeAction, WaitAction, DoneAction, FailAction, ScrollAction,
         BrowserNavigateAction, BrowserClickAction, BrowserTypeAction, Action
     )
-    
+
     actions = []
-    # Split by semicolon, but handle potential whitespace
-    parts = [p.strip() for p in output.action_param.split(";") if p.strip()]
+    # Use smart split so inner semicolons (e.g. shell for-loops) are NOT treated
+    # as action separators.
+    parts = [p.strip() for p in _smart_split(output.action_param) if p.strip()]
     
+    def _strip_outer_quotes(s: str) -> str:
+        """Strip matching outer quote pair only — never strips interior quotes."""
+        s = s.strip()
+        if len(s) >= 2 and (
+            (s[0] == '"' and s[-1] == '"') or
+            (s[0] == "'" and s[-1] == "'")
+        ):
+            return s[1:-1]
+        return s
+
     for part in parts:
-        # Check for standalone tokens like DONE or FAIL
+        # ── Standalone tokens ────────────────────────────────────
         if part.upper() == "DONE":
             actions.append(DoneAction(final_answer="Goal reached", reason=output.reason))
             continue
@@ -274,26 +394,33 @@ def parse_actions(output: PlannerOutput) -> list:
             actions.append(FailAction(error="Task failed", reason=output.reason))
             continue
 
-        # Regex to match TYPE(param) or TYPE("param") or BROWSER_TYPE(selector, text)
-        match = re.match(r"(\w+)\((.*)\)", part)
+        # ── Python repr format (TypeAction(...), PressKeyAction(...)…) ──
+        # DSPy sometimes emits this instead of the compact function-call format.
+        repr_match = re.match(r"(\w+Action)\((.*)\)$", part, re.DOTALL)
+        if repr_match:
+            action = _parse_repr_action(repr_match.group(1), repr_match.group(2), output.reason)
+            if action:
+                actions.append(action)
+                continue
+
+        # ── Standard compact format: TYPE(...), PRESS_KEY(...) etc. ──
+        # re.DOTALL so multi-line text inside TYPE() is captured correctly.
+        match = re.match(r"(\w+)\((.*)\)$", part, re.DOTALL)
         if not match:
             continue
-            
+
         a_type = match.group(1).upper()
-        a_param = match.group(2).strip("'\"") # Remove quotes
-        
-        # Handle browser actions with multiple parameters
+        raw_param = match.group(2)
+
+        # ── Browser actions (two-value params) ─────────────────
         if a_type.startswith("BROWSER_"):
-            # Clean up common LLM mistakes like url='amazon.com' or selector='input'
-            # Extract just the values, stripping parameter names if present
             cleaned_params = []
-            for p in a_param.split(",", 1):
+            for p in raw_param.split(",", 1):
                 p = p.strip().strip("'\"")
-                # Remove parameter names like "url=", "selector=", "text="
                 if '=' in p:
                     p = p.split('=', 1)[1].strip("'\"")
                 cleaned_params.append(p)
-            
+
             if a_type == "BROWSER_NAVIGATE":
                 url = cleaned_params[0] if cleaned_params else ""
                 actions.append(BrowserNavigateAction(url=url, reason=output.reason))
@@ -302,37 +429,58 @@ def parse_actions(output: PlannerOutput) -> list:
                     index = int(cleaned_params[0]) if cleaned_params else 0
                     actions.append(BrowserClickAction(element_index=index, reason=output.reason))
                 except ValueError:
-                    pass  # Skip invalid index
+                    pass
             elif a_type == "BROWSER_TYPE":
                 try:
                     index = int(cleaned_params[0]) if len(cleaned_params) > 0 else 0
                     text = cleaned_params[1] if len(cleaned_params) > 1 else ""
                     actions.append(BrowserTypeAction(element_index=index, text=text, reason=output.reason))
                 except ValueError:
-                    pass  # Skip invalid index
+                    pass
             continue
-        
-        # Regular desktop actions
+
+        # ── Regular desktop actions ─────────────────────────────
         if a_type == "PRESS_KEY":
+            # Key names never contain meaningful outer quotes
+            a_param = raw_param.strip().strip("'\"")
             actions.append(PressKeyAction(key=a_param, reason=output.reason))
+
         elif a_type == "TYPE":
+            # Use safe outer-quote stripping so shell commands like
+            #   TYPE(for file in *; do echo Hello > "$file"; done)
+            # are preserved intact.
+            a_param = _strip_outer_quotes(raw_param)
             actions.append(TypeAction(text=a_param, reason=output.reason))
+
         elif a_type == "WAIT":
+            a_param = raw_param.strip().strip("'\"")
             try:
                 sec = float(a_param) if a_param else 1.0
-            except:
+            except (ValueError, TypeError):
                 sec = 1.0
             actions.append(WaitAction(seconds=sec, reason=output.reason))
+
         elif a_type == "DONE":
+            a_param = _strip_outer_quotes(raw_param)
             actions.append(DoneAction(final_answer=a_param or "Goal reached", reason=output.reason))
+
         elif a_type == "SCROLL":
+            a_param = raw_param.strip().strip("'\"")
             try:
-                # amount can be 'down' or a number. If 'down' we use a default
-                val = -10 if a_param.lower() == "down" else 10 if a_param.lower() == "up" else int(a_param)
-            except:
+                val = (
+                    -10 if a_param.lower() == "down"
+                    else 10 if a_param.lower() == "up"
+                    else int(a_param)
+                )
+            except (ValueError, TypeError):
                 val = -10
             actions.append(ScrollAction(amount=val, reason=output.reason))
+
         elif a_type == "FAIL":
+            a_param = _strip_outer_quotes(raw_param)
             actions.append(FailAction(error=a_param or "Task failed", reason=output.reason))
-            
-    return actions or [FailAction(error=f"Failed to parse sequence: {output.action_param}", reason=output.reason)]
+
+    return actions or [FailAction(
+        error=f"Failed to parse sequence: {output.action_param}",
+        reason=output.reason,
+    )]

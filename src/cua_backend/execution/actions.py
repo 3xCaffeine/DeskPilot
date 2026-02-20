@@ -63,16 +63,44 @@ def right_click(x: int, y: int) -> None:
 
 def type_text(text: str, interval: float = 0.02) -> None:
     """
-    Type text character by character.
-    
-    WHY interval=0.02?
-    Too fast and some apps miss keystrokes.
-    0.02 seconds per char = 50 chars/second = fast but reliable.
-    
+    Type text into the currently focused window.
+
+    WHY TWO APPROACHES?
+    pyautogui.typewrite() sends individual key events mapped from characters.
+    For plain ASCII letters and digits it works fine, but on Linux/X11 it
+    silently drops or mis-types special shell characters such as
+        $  *  >  <  |  ;  &  {  }  (  )  #  !  ~  `  \\
+    because those need Shift or compose sequences that pyautogui doesn't handle.
+
+    xdotool type --clearmodifiers:
+    - Speaks directly to the X11 input system
+    - Handles *every* Unicode character via XSendEvent
+    - Is always present in the Docker image (installed alongside xdotool)
+    - Falls back gracefully: if xdotool isn't available we drop to pyautogui
+
     Args:
-        text: String to type
-        interval: Delay between each character
+        text:     String to type (may contain any printable characters including
+                  shell metacharacters like $, *, >, ;, etc.)
+        interval: Per-character delay used only when falling back to pyautogui
     """
+    import subprocess
+    import os
+
+    # Try xdotool first — far more reliable for shell commands on Linux/X11
+    if os.name != "nt":  # Skip on Windows (dev machines)
+        try:
+            result = subprocess.run(
+                ["xdotool", "type", "--clearmodifiers", "--delay", "20", "--", text],
+                capture_output=True,
+                timeout=30,
+            )
+            if result.returncode == 0:
+                return
+            # If xdotool failed for some reason, fall through to pyautogui
+        except (FileNotFoundError, subprocess.SubprocessError):
+            pass  # xdotool not available — fall through
+
+    # Fallback: pyautogui (reliable for plain ASCII on all platforms)
     pyautogui.typewrite(text, interval=interval)
 
 

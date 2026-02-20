@@ -360,11 +360,14 @@ class DesktopController(Executor):
         Collect all text-based state for the OBSERVE phase.
         Returns a dict compatible with PlannerInput.text_state.
         """
+        import os
         active = self.get_active_window()
         state = {
             "active_app": active.app_name if active else "",
             "window_title": active.title if active else "",
             "focused_element": "",  # TODO: implement AT-SPI query
+            "home_dir": os.path.expanduser("~"),
+            "desktop_path": os.path.expanduser("~/Desktop"),
         }
         
         # Add browser state if Chrome is active

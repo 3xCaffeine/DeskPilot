@@ -1,0 +1,19 @@
+{
+    "tasks": [
+        "Open Chrome and go to YouTube, search for lo-fi music, and play the first video",
+        "Open the file manager and create a folder called 'projects' on the Desktop",
+        "Open a terminal and check disk usage with df -h",
+        "Open Chrome, go to Google, and search for 'weather today'",
+        "Open a terminal and list all running processes",
+        "Open Chrome and navigate to wikipedia.org",
+        "Open a terminal and create a file called hello.txt on the Desktop with the text 'Hello World'",
+        "Open Chrome, go to github.com, and search for 'computer use agent'",
+        "Open the file manager, navigate to /root/Desktop, and create a new folder called 'backups'",
+        "Open a terminal and show the last 10 commands from shell history",
+        "Open Chrome and go to google.com and search for KIIT University and open the official website",
+        "Open a terminal and run: whoami && hostname",
+        "Open Chrome and go to youtube.com",
+        "Open a terminal and create a nested directory structure: /root/Desktop/project/src/utils",
+        "Open a terminal and show the current date and time"
+    ]
+}

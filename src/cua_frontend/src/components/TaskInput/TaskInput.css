@@ -1,0 +1,95 @@
+.task-input {
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  max-width: 760px;
+}
+
+.task-input-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.task-input-header h3 {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+}
+
+.task-input-hint {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
+.task-textarea {
+  min-height: 120px;
+  font-size: var(--font-size-base);
+}
+
+/* Footer row */
+.task-input-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* Steps slider */
+.task-input-steps {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 160px;
+}
+
+.steps-label {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.steps-value {
+  color: var(--accent-primary);
+  font-weight: 600;
+  font-family: var(--font-mono);
+  margin-left: 4px;
+}
+
+.steps-slider {
+  flex: 1;
+  appearance: none;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-tertiary);
+  outline: none;
+  cursor: pointer;
+}
+
+.steps-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(0, 212, 255, 0.4);
+}
+
+/* Actions */
+.task-input-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* Spin animation for random / loading */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.spin {
+  display: inline-block;
+  animation: spin 0.7s linear infinite;
+}

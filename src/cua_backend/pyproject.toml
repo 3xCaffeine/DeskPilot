@@ -17,4 +17,5 @@ dependencies = [
     "google-genai>=1.63.0",
     "pytesseract>=0.3.13",
     "uvicorn>=0.41.0",
+    "fastapi>=0.135.1",
 ]

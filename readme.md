@@ -35,7 +35,7 @@ python api_server.py
 Execute tasks directly from your command line.
 ```bash
 cd src/cua_backend
-python run.py "Open Chrome and search for lo-fi music" --model "openrouter/google/gemini-2.0-flash-001"
+docker exec -it deskpilot-desktop python3 /app/src/cua_backend/run.py "Open Chrome and search for lo-fi music" --model "openrouter/google/gemini-2.0-flash-001"
 ```
 
 ---

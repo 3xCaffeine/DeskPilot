@@ -40,7 +40,7 @@ AVAILABLE_MODELS = [
 ]
 
 RANDOM_TASKS_PATH = Path(__file__).resolve().parents[3] / "configs" / "random_tasks.json"
-RUNS_DIR = Path("runs")
+RUNS_DIR = Path(__file__).resolve().parents[3] / "runs"
 
 
 # ── Tasks ──

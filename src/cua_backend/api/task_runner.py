@@ -53,11 +53,14 @@ class TaskRunner:
                 vision_client = GeminiClient(model=gemini_model)
 
             controller = DesktopController()
+            root_dir = Path(__file__).resolve().parents[3]
+            runs_dir = str(root_dir / "runs")
+
             agent = Agent(
                 planner=planner,
                 executor=controller,
                 vision_llm=vision_client,
-                runs_dir="runs",
+                runs_dir=runs_dir,
                 on_step_callback=self._on_step,
             )
 
@@ -104,7 +107,7 @@ class TaskRunner:
         self.event_queue.put(event)
 
     def _save_metadata(self):
-        run_dir = Path("runs") / self.task_id
+        run_dir = Path(__file__).resolve().parents[3] / "runs" / self.task_id
         run_dir.mkdir(parents=True, exist_ok=True)
         meta = {
             "goal": self.goal,

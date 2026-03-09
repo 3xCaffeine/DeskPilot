@@ -269,3 +269,17 @@ h1, h2, h3, h4 {
 .animate-slide-up { animation: fadeSlideUp 180ms ease forwards; }
 .spin { display: inline-block; animation: spin 0.7s linear infinite; }
 
+/* ═══════════════════════════════════════════
+   BANNERS
+═══════════════════════════════════════════ */
+.banner {
+  padding: 10px 16px;
+  border-radius: var(--r-panel);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.banner-success { background: var(--green-subtle);      color: var(--green);  border: 1px solid rgba(34, 197, 94, 0.2); }
+.banner-error   { background: var(--red-subtle);        color: var(--red);    border: 1px solid rgba(239, 68, 68, 0.2); }
+.banner-warning { background: rgba(234, 179, 8, 0.08); color: var(--yellow); border: 1px solid rgba(234, 179, 8, 0.2); }
+

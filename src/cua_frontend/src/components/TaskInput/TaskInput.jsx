@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import { apiGet, apiPost } from '../../api/client'
 import './TaskInput.css'
 
-export default function TaskInput({ model, maxSteps, onTaskStarted }) {
+export default function TaskInput({ model, setModel, availableModels = [], maxSteps, onTaskStarted }) {
   const [goal, setGoal] = useState('')
   const [steps, setSteps] = useState(maxSteps ?? 10)
   const [loadingRandom, setLoadingRandom] = useState(false)
@@ -44,10 +44,23 @@ export default function TaskInput({ model, maxSteps, onTaskStarted }) {
   }
 
   return (
-    <div className="task-input glass-card">
+    <div className="task-input surface-card">
       <div className="task-input-header">
         <h3>What should DeskPilot do?</h3>
-        <span className="task-input-hint">Ctrl+Enter to run</span>
+        <div className="task-input-meta">
+          {availableModels.length > 0 && (
+            <select
+              className="model-select"
+              value={model}
+              onChange={e => setModel(e.target.value)}
+            >
+              {availableModels.map(m => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          )}
+          <span className="task-input-hint">Ctrl+Enter to run</span>
+        </div>
       </div>
 
       <textarea

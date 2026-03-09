@@ -11,7 +11,7 @@ export default function App() {
     <div className="app-shell">
       <Sidebar />
       <div className="app-main">
-        <Header config={config} />
+        <Header />
         <main className="app-content">
           <Outlet context={config} />
         </main>

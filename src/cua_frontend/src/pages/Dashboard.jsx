@@ -4,8 +4,8 @@ import TaskInput from '../components/TaskInput/TaskInput'
 import './Dashboard.css'
 
 export default function Dashboard() {
-  const { model, maxSteps } = useOutletContext()
-  const [activeTask, setActiveTask] = useState(null) // { taskId, goal }
+  const { model, setModel, availableModels, maxSteps } = useOutletContext()
+  const [activeTask, setActiveTask] = useState(null)
 
   function handleTaskStarted(taskId, goal) {
     setActiveTask({ taskId, goal })
@@ -25,11 +25,9 @@ export default function Dashboard() {
           </div>
           <button className="btn btn-ghost" onClick={handleNewTask}>✕ New Task</button>
         </div>
-
-        {/* Phase 5 — live execution view goes here */}
-        <div className="execution-placeholder glass-card">
+        <div className="execution-placeholder surface-card">
           <p>⏳ Task <code>{activeTask.taskId}</code> started.</p>
-          <p style={{ color: 'var(--text-muted)', marginTop: 8 }}>Live view coming in Phase 5.</p>
+          <p className="text-muted" style={{ marginTop: 8 }}>Live view coming in Phase 5.</p>
         </div>
       </div>
     )
@@ -43,10 +41,11 @@ export default function Dashboard() {
       </div>
       <TaskInput
         model={model}
+        setModel={setModel}
+        availableModels={availableModels}
         maxSteps={maxSteps}
         onTaskStarted={handleTaskStarted}
       />
     </div>
   )
 }
-

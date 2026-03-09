@@ -3,11 +3,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 var(--content-padding);
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border-bottom: var(--glass-border);
+  padding: 0 var(--page-pad);
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
   z-index: 50;
@@ -15,66 +13,15 @@
 }
 
 .header-title {
-  font-size: var(--font-size-base);
-  font-weight: 600;
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  letter-spacing: -0.2px;
 }
 
 .header-status-dot {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: currentColor;
   animation: pulse-badge 1.5s ease-in-out infinite;
-}
-
-/* Model selector */
-.model-selector {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--bg-card-hover);
-  border: var(--glass-border);
-  border-radius: var(--radius-sm);
-  padding: 4px 4px 4px 12px;
-}
-
-.model-selector-label {
-  font-size: var(--font-size-xs);
-  color: var(--text-muted);
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.model-select {
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  color: var(--accent-primary);
-  font-family: var(--font-mono);
-  font-size: var(--font-size-xs);
-  font-weight: 500;
-  padding: 4px 28px 4px 10px;
-  cursor: pointer;
-  outline: none;
-  transition: all var(--t);
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%2300d4ff' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 8px center;
-}
-
-.model-select:focus {
-  border-color: var(--accent-primary);
-  box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.15);
-}
-
-.model-select option {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
 }

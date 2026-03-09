@@ -1,0 +1,34 @@
+.screenshot-container {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: var(--bg-elevated);
+  border-radius: var(--r-panel);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.screenshot-placeholder {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  position: absolute;
+}
+
+.screenshot-skel {
+  position: absolute;
+  inset: 0;
+  border-radius: 0;
+}
+
+.screenshot-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.screenshot-img.hidden { display: none; }

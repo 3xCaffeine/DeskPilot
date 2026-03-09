@@ -116,7 +116,10 @@ RUN pip3 install --no-cache-dir \
     litellm \
     pytesseract \
     playwright \
-    nest-asyncio
+    nest-asyncio \
+    fastapi \
+    "uvicorn[standard]" \
+    python-multipart
 
 # Install Playwright browsers (Chromium only - we use system Chrome for CDP)
 RUN playwright install-deps chromium
@@ -147,6 +150,8 @@ WORKDIR /app
 
 # Expose VNC port (connect with VNC viewer to see desktop)
 EXPOSE 5900
+EXPOSE 6080
+EXPOSE 8000
 
 # Start supervisor (which starts Xvfb, XFCE, and VNC)
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

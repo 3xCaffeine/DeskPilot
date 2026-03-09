@@ -118,22 +118,43 @@ async def task_ws(ws: WebSocket, task_id: str):
         await ws.close()
         return
 
-    # Replay past events
+    # Replay past events to late-joining clients
     for event in runner.events:
         await ws.send_json(event.model_dump())
 
-    # Stream new events
-    try:
+    async def _stream():
+        """Push step events from the runner queue to the client."""
         while runner.status in ("queued", "running"):
             try:
                 event = await asyncio.to_thread(runner.event_queue.get, timeout=1.0)
                 await ws.send_json(event.model_dump())
                 if event.event_type in ("completed", "failed", "cancelled"):
-                    break
+                    return
             except Exception:
-                continue  # Queue timeout, keep polling
+                continue
+
+    async def _receive():
+        """Listen for cancel messages from the client."""
+        try:
+            async for msg in ws.iter_json():
+                if isinstance(msg, dict) and msg.get("action") == "cancel":
+                    runner.cancel()
+                    return
+        except Exception:
+            pass
+
+    stream_task = asyncio.create_task(_stream())
+    recv_task = asyncio.create_task(_receive())
+    try:
+        done, pending = await asyncio.wait(
+            [stream_task, recv_task],
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for t in pending:
+            t.cancel()
     except WebSocketDisconnect:
-        pass
+        stream_task.cancel()
+        recv_task.cancel()
 
 
 # ── Random Task ──

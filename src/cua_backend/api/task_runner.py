@@ -10,6 +10,11 @@ from typing import Optional
 from .schemas import StepEvent
 
 
+class _TaskCancelled(BaseException):
+    """Raised from on_step_callback to abort the agent loop.
+    Inherits BaseException so it passes through 'except Exception' in core.py."""
+
+
 class TaskRunner:
     """Runs an Agent task in a background thread with event streaming."""
 
@@ -85,6 +90,14 @@ class TaskRunner:
                     timestamp=datetime.now().isoformat(),
                 ))
 
+        except _TaskCancelled:
+            self.status = "cancelled"
+            self._emit(StepEvent(
+                event_type="cancelled", step=0,
+                action_type="DONE", action_detail="Cancelled by user",
+                result_ok=True, timestamp=datetime.now().isoformat(),
+            ))
+
         except Exception as e:
             self.status = "failed"
             self.error = str(e)
@@ -97,8 +110,14 @@ class TaskRunner:
         # Save metadata
         self._save_metadata()
 
+    def cancel(self):
+        """Signal the running task to abort."""
+        self.cancel_flag.set()
+
     def _on_step(self, data: dict):
         """Callback invoked by Agent after each action."""
+        if self.cancel_flag.is_set():
+            raise _TaskCancelled()
         event = StepEvent(**data)
         self._emit(event)
 

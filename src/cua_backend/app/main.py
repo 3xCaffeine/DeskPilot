@@ -7,6 +7,7 @@ import argparse
 from cua_backend.agent import Agent, Planner
 from cua_backend.execution import DesktopController
 from cua_backend.schemas.tasks import Task
+from pathlib import Path
 
 def main():
     parser = argparse.ArgumentParser(description="DeskPilot CLI")

@@ -1,0 +1,54 @@
+.history-page {
+  padding: var(--page-pad);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.history-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.history-title {
+  font-size: var(--fs-xl);
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+
+.history-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.history-search { width: 220px; }
+.history-sort   { width: 130px; }
+
+.history-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--gap);
+}
+
+.run-card-skeleton {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--r-panel);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.history-empty,
+.history-error {
+  text-align: center;
+  padding: 48px;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.history-error { color: var(--red); }

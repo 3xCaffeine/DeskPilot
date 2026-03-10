@@ -1,6 +1,7 @@
 """DeskPilot API server."""
 
 import json
+import os
 import random
 import asyncio
 from pathlib import Path
@@ -41,6 +42,27 @@ AVAILABLE_MODELS = [
 
 RANDOM_TASKS_PATH = Path(__file__).resolve().parents[3] / "configs" / "random_tasks.json"
 RUNS_DIR = Path(__file__).resolve().parents[3] / "runs"
+SETTINGS_PATH = Path(__file__).resolve().parents[3] / "configs" / "settings.json"
+
+
+def _load_saved_settings():
+    """Load persisted settings and apply env vars."""
+    if SETTINGS_PATH.exists():
+        try:
+            data = json.loads(SETTINGS_PATH.read_text())
+            if data.get("openrouter_api_key"):
+                os.environ["OPENROUTER_API_KEY"] = data["openrouter_api_key"]
+            if data.get("gemini_api_key"):
+                os.environ["GEMINI_API_KEY"] = data["gemini_api_key"]
+            if data.get("default_model"):
+                _config["default_model"] = data["default_model"]
+            if data.get("default_max_steps"):
+                _config["default_max_steps"] = data["default_max_steps"]
+        except Exception:
+            pass
+
+
+_load_saved_settings()
 
 
 # ── Tasks ──
@@ -173,10 +195,25 @@ def get_random_task():
 
 @app.get("/api/config", response_model=ConfigResponse)
 def get_config():
+    import subprocess, shutil
+    docker_status = "unknown"
+    if shutil.which("docker"):
+        try:
+            r = subprocess.run(
+                ["docker", "inspect", "--format", "{{.State.Running}}", "deskpilot-desktop"],
+                capture_output=True, text=True, timeout=3
+            )
+            docker_status = "running" if r.stdout.strip() == "true" else "stopped"
+        except Exception:
+            pass
     return ConfigResponse(
         default_model=_config["default_model"],
         default_max_steps=_config["default_max_steps"],
         available_models=AVAILABLE_MODELS,
+        docker_status=docker_status,
+        vnc_url="http://localhost:6080/vnc.html",
+        openrouter_key_set=bool(os.environ.get("OPENROUTER_API_KEY")),
+        gemini_key_set=bool(os.environ.get("GEMINI_API_KEY")),
     )
 
 
@@ -186,6 +223,27 @@ def update_config(req: ConfigUpdateRequest):
         _config["default_model"] = req.default_model
     if req.default_max_steps is not None:
         _config["default_max_steps"] = req.default_max_steps
+    # Persist to disk and update env vars
+    saved: dict = {}
+    if SETTINGS_PATH.exists():
+        try:
+            saved = json.loads(SETTINGS_PATH.read_text())
+        except Exception:
+            pass
+    saved["default_model"] = _config["default_model"]
+    saved["default_max_steps"] = _config["default_max_steps"]
+    if req.openrouter_api_key is not None:
+        val = req.openrouter_api_key.strip()
+        if val:
+            os.environ["OPENROUTER_API_KEY"] = val
+            saved["openrouter_api_key"] = val
+    if req.gemini_api_key is not None:
+        val = req.gemini_api_key.strip()
+        if val:
+            os.environ["GEMINI_API_KEY"] = val
+            saved["gemini_api_key"] = val
+    SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    SETTINGS_PATH.write_text(json.dumps(saved, indent=2))
     return {"status": "updated"}
 
 

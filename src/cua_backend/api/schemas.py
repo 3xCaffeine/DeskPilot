@@ -46,8 +46,14 @@ class ConfigResponse(BaseModel):
     default_model: str
     default_max_steps: int
     available_models: List[str]
+    docker_status: str = "unknown"
+    vnc_url: str = "http://localhost:6080/vnc.html"
+    openrouter_key_set: bool = False
+    gemini_key_set: bool = False
 
 
 class ConfigUpdateRequest(BaseModel):
     default_model: Optional[str] = None
     default_max_steps: Optional[int] = None
+    openrouter_api_key: Optional[str] = None
+    gemini_api_key: Optional[str] = None

@@ -1,0 +1,204 @@
+.settings-page {
+  padding: var(--page-pad);
+  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+.settings-title {
+  font-size: var(--fs-xl);
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.settings-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--r-panel);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-section-title {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 4px;
+}
+
+.settings-label {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.settings-select {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--r-input);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: border-color var(--t);
+}
+.settings-select:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.settings-slider {
+  width: 100%;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.settings-error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid var(--red);
+  color: var(--red);
+  border-radius: var(--r-panel);
+  padding: 8px 14px;
+  font-size: var(--fs-sm);
+}
+
+.settings-status-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.settings-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dot-green { background: var(--green); }
+.dot-red   { background: var(--red); }
+
+.settings-status-text {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  text-transform: capitalize;
+}
+
+.settings-link {
+  font-size: var(--fs-sm);
+  color: var(--accent);
+  text-decoration: none;
+}
+.settings-link:hover { text-decoration: underline; }
+
+.settings-key-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.settings-key-value {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--r-badge);
+  padding: 3px 8px;
+  letter-spacing: 0.5px;
+}
+
+.settings-key-hint {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  margin: 0 0 4px;
+}
+
+.settings-key-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.settings-key-field .input {
+  width: 100%;
+  padding-right: 40px;
+}
+
+.key-toggle {
+  position: absolute;
+  right: 1px;
+  top: 1px;
+  bottom: 1px;
+  width: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0 calc(var(--r-input) - 1px) calc(var(--r-input) - 1px) 0;
+  background: var(--bg-elevated);
+  border: none;
+  border-left: 1px solid var(--border);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--t), background var(--t);
+  padding: 0;
+}
+.key-toggle:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.key-toggle svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.dot-set {
+  color: var(--green);
+  font-size: var(--fs-xs);
+  margin-left: 6px;
+}
+
+.settings-save-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  padding: 14px 0 4px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+
+.settings-save-feedback {
+  font-size: var(--fs-sm);
+  color: var(--green);
+}
+
+.settings-save-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 8px 20px;
+  border-radius: var(--r-panel);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: opacity var(--t), transform var(--t);
+}
+.settings-save-btn:hover  { opacity: 0.88; }
+.settings-save-btn:active { transform: scale(0.97); }

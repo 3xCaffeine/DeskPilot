@@ -14,14 +14,21 @@ const STATUS_CLASS = {
   failed:    'badge badge-error',
 }
 
-export default function Header({ agentStatus = 'idle' }) {
+export default function Header({ agentStatus = 'idle', onMenuToggle }) {
   const { pathname } = useLocation()
   const title = PAGE_TITLES[pathname] ?? 'Run Detail'
   const cls = STATUS_CLASS[agentStatus] ?? 'badge badge-muted'
 
   return (
     <header className="header">
-      <h2 className="header-title">{title}</h2>
+      <div className="header-left">
+        <button className="header-menu-btn" onClick={onMenuToggle} aria-label="Toggle navigation menu">
+          <span />
+          <span />
+          <span />
+        </button>
+        <h2 className="header-title">{title}</h2>
+      </div>
       <span className={cls}>
         {agentStatus === 'running' && <span className="header-status-dot" />}
         {agentStatus.charAt(0).toUpperCase() + agentStatus.slice(1)}

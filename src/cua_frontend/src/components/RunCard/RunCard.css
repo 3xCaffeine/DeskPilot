@@ -4,12 +4,14 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  transition: border-color var(--t), background var(--t);
+  transition: border-color var(--t), background var(--t), transform 200ms ease, box-shadow 200ms ease;
 }
 
 .run-card:hover {
   border-color: var(--border-hover);
   background: var(--bg-elevated);
+  transform: translateY(-4px);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.2);
 }
 
 .run-card-top {

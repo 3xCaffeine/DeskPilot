@@ -7,9 +7,9 @@ const NAV = [
   { to: '/settings', icon: '⚙️', label: 'Settings' },
 ]
 
-export default function Sidebar() {
+export default function Sidebar({ mobileOpen = false, onNavigate }) {
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${mobileOpen ? ' mobile-open' : ''}`}>
       <div className="sidebar-logo">
         <span className="sidebar-logo-icon">🤖</span>
         <span className="sidebar-logo-text">DeskPilot</span>
@@ -22,6 +22,7 @@ export default function Sidebar() {
             to={to}
             end={to === '/'}
             className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}
+            onClick={onNavigate}
           >
             <span className="sidebar-link-icon">{icon}</span>
             <span>{label}</span>

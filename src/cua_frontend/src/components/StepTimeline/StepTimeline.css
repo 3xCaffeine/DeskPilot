@@ -24,7 +24,8 @@
   border-radius: var(--r-panel);
   border: 1px solid var(--border);
   background: var(--bg-panel);
-  transition: border-color var(--t), background var(--t);
+  transition: border-color var(--t), background var(--t), transform 200ms ease;
+  animation-delay: calc(var(--step-index, 0) * 45ms);
 }
 
 .step-card.clickable { cursor: pointer; }
@@ -32,6 +33,7 @@
 .step-card.selected {
   border-color: var(--border-hover);
   background: var(--bg-elevated);
+  transform: translateY(-2px);
 }
 
 .step-num {

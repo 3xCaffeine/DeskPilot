@@ -121,6 +121,32 @@ def list_tasks():
     return results
 
 
+@app.get("/api/tasks/{task_id}", response_model=TaskSummary)
+def get_task(task_id: str):
+    # Check in-memory first
+    runner = _runners.get(task_id)
+    if runner:
+        return TaskSummary(
+            task_id=task_id, goal=runner.goal, status=runner.status,
+            model=runner.model,
+            steps_taken=len([e for e in runner.events if e.event_type == "step"]),
+            final_answer=runner.final_answer, error=runner.error,
+            created_at=runner.created_at,
+        )
+    # Fall back to disk
+    meta_file = RUNS_DIR / task_id / "metadata.json"
+    if meta_file.exists():
+        meta = json.loads(meta_file.read_text())
+        return TaskSummary(
+            task_id=task_id, goal=meta.get("goal", ""),
+            status=meta.get("status", "unknown"), model=meta.get("model", ""),
+            steps_taken=meta.get("steps_taken", 0),
+            final_answer=meta.get("final_answer"), error=meta.get("error"),
+            created_at=meta.get("created_at", ""),
+        )
+    raise HTTPException(404, "Task not found")
+
+
 @app.get("/api/tasks/{task_id}/steps/{step_num}/screenshot")
 def get_screenshot(task_id: str, step_num: int):
     path = RUNS_DIR / task_id / f"step_{step_num:03d}.png"
@@ -146,14 +172,36 @@ async def task_ws(ws: WebSocket, task_id: str):
 
     async def _stream():
         """Push step events from the runner queue to the client."""
-        while runner.status in ("queued", "running"):
+        TERMINAL = {"completed", "failed", "cancelled"}
+        while True:
             try:
                 event = await asyncio.to_thread(runner.event_queue.get, timeout=1.0)
                 await ws.send_json(event.model_dump())
-                if event.event_type in ("completed", "failed", "cancelled"):
+                if event.event_type in TERMINAL:
                     return
             except Exception:
-                continue
+                # Queue timed out — check if runner finished without us seeing the event
+                if runner.status in TERMINAL:
+                    # Drain any remaining events (e.g. the terminal one we may have missed)
+                    from queue import Empty
+                    while True:
+                        try:
+                            event = runner.event_queue.get_nowait()
+                            await ws.send_json(event.model_dump())
+                            if event.event_type in TERMINAL:
+                                return
+                        except Empty:
+                            break
+                    # Send synthetic terminal event so frontend always gets one
+                    await ws.send_json({
+                        "event_type": runner.status,
+                        "step": 0, "action_type": "DONE", "action_detail": "",
+                        "result_ok": runner.status == "completed",
+                        "final_answer": runner.final_answer,
+                        "error": runner.error,
+                        "timestamp": "",
+                    })
+                    return
 
     async def _receive():
         """Listen for cancel messages from the client."""
@@ -172,8 +220,16 @@ async def task_ws(ws: WebSocket, task_id: str):
             [stream_task, recv_task],
             return_when=asyncio.FIRST_COMPLETED,
         )
-        for t in pending:
-            t.cancel()
+        # If _receive finished first (cancel was sent), let _stream
+        # deliver the terminal event before closing — give it 8 seconds.
+        if recv_task in done and not stream_task.done():
+            try:
+                await asyncio.wait_for(stream_task, timeout=8.0)
+            except (asyncio.TimeoutError, Exception):
+                stream_task.cancel()
+        else:
+            for t in pending:
+                t.cancel()
     except WebSocketDisconnect:
         stream_task.cancel()
         recv_task.cancel()

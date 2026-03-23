@@ -1,5 +1,6 @@
 """Background task runner — wraps the Agent for async API usage."""
 
+import subprocess
 import threading
 import json
 from datetime import datetime
@@ -39,6 +40,7 @@ class TaskRunner:
 
     def _run(self):
         self.status = "running"
+        self._cleanup_desktop()
         try:
             from ..agent import Planner, Agent
             from ..execution import DesktopController
@@ -67,21 +69,21 @@ class TaskRunner:
                 vision_llm=vision_client,
                 runs_dir=runs_dir,
                 on_step_callback=self._on_step,
+                cancel_check=self._check_cancel,
             )
 
             task = Task(goal=self.goal, max_steps=self.max_steps, run_id=self.task_id)
             result = agent.run(task)
 
             if result.success:
-                self.status = "completed"
                 self.final_answer = result.final_answer
                 self._emit(StepEvent(
                     event_type="completed", step=result.steps_taken,
                     action_type="DONE", action_detail=result.final_answer or "",
                     result_ok=True, timestamp=datetime.now().isoformat(),
                 ))
+                self.status = "completed"
             else:
-                self.status = "failed"
                 self.error = result.error
                 self._emit(StepEvent(
                     event_type="failed", step=result.steps_taken,
@@ -89,23 +91,24 @@ class TaskRunner:
                     result_ok=False, error=result.error,
                     timestamp=datetime.now().isoformat(),
                 ))
+                self.status = "failed"
 
         except _TaskCancelled:
-            self.status = "cancelled"
             self._emit(StepEvent(
                 event_type="cancelled", step=0,
                 action_type="DONE", action_detail="Cancelled by user",
                 result_ok=True, timestamp=datetime.now().isoformat(),
             ))
+            self.status = "cancelled"
 
         except Exception as e:
-            self.status = "failed"
             self.error = str(e)
             self._emit(StepEvent(
                 event_type="failed", action_type="FAIL",
                 action_detail=str(e), result_ok=False, error=str(e),
                 timestamp=datetime.now().isoformat(),
             ))
+            self.status = "failed"
 
         # Save metadata
         self._save_metadata()
@@ -113,6 +116,39 @@ class TaskRunner:
     def cancel(self):
         """Signal the running task to abort."""
         self.cancel_flag.set()
+
+    def _check_cancel(self):
+        """Raise _TaskCancelled if cancel has been requested."""
+        if self.cancel_flag.is_set():
+            raise _TaskCancelled()
+
+    def _cleanup_desktop(self):
+        """Close all open windows before starting a new task."""
+        try:
+            # Get list of all window IDs
+            result = subprocess.run(
+                ["xdotool", "search", "--onlyvisible", "--name", ""],
+                capture_output=True, text=True, timeout=3
+            )
+            wids = result.stdout.strip().split('\n')
+            for wid in wids:
+                wid = wid.strip()
+                if not wid:
+                    continue
+                # Skip the desktop itself (window name "Desktop")
+                name = subprocess.run(
+                    ["xdotool", "getwindowname", wid],
+                    capture_output=True, text=True, timeout=2
+                )
+                title = name.stdout.strip().lower()
+                if title in ("desktop", "xfdesktop", ""):
+                    continue
+                subprocess.run(["xdotool", "windowclose", wid],
+                               capture_output=True, timeout=2)
+            import time
+            time.sleep(0.5)
+        except Exception:
+            pass  # Best-effort cleanup
 
     def _on_step(self, data: dict):
         """Callback invoked by Agent after each action."""

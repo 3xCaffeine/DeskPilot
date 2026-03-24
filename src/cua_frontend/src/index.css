@@ -127,9 +127,16 @@ h1, h2, h3, h4 {
   font-size: var(--fs-sm);
   font-weight: 500;
   cursor: pointer;
-  transition: background var(--t), color var(--t);
+  transition: background 200ms ease, color 200ms ease, transform 100ms ease, box-shadow 200ms ease, border-color 200ms ease;
   white-space: nowrap;
   user-select: none;
+}
+.btn:hover:not(:disabled) {
+  transform: scale(1.02);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+}
+.btn:active:not(:disabled) {
+  transform: scale(0.98);
 }
 .btn:disabled {
   opacity: 0.4;
@@ -219,6 +226,7 @@ h1, h2, h3, h4 {
 
 .input:focus, .textarea:focus, .select:focus {
   border-color: var(--accent);
+  transition: border-color 200ms ease, box-shadow 200ms ease;
   box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.5);
 }
 
@@ -253,8 +261,8 @@ h1, h2, h3, h4 {
 }
 
 @keyframes pulse-badge {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: 0.5; }
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.65; transform: scale(1.05); }
 }
 
 @keyframes fadeSlideUp {
@@ -268,6 +276,15 @@ h1, h2, h3, h4 {
 
 .animate-slide-up { animation: fadeSlideUp 180ms ease forwards; }
 .spin { display: inline-block; animation: spin 0.7s linear infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 
 /* ═══════════════════════════════════════════
    BANNERS

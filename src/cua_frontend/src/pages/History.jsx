@@ -16,11 +16,17 @@ export default function History() {
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState('newest')
 
-  useEffect(() => {
+  function loadRuns() {
+    setLoading(true)
+    setError(null)
     apiGet('/tasks')
       .then(setRuns)
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    loadRuns()
   }, [])
 
   const filtered = runs
@@ -62,7 +68,12 @@ export default function History() {
         </div>
       )}
 
-      {error && <p className="history-error">Failed to load: {error}</p>}
+      {error && (
+        <div className="history-error surface-card animate-slide-up">
+          <p>Failed to load: {error}</p>
+          <button className="btn btn-secondary" onClick={loadRuns}>Retry</button>
+        </div>
+      )}
 
       {!loading && !error && filtered.length === 0 && (
         <div className="history-empty">

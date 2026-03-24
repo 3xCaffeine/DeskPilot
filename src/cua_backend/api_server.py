@@ -1,4 +1,11 @@
-"""Start the DeskPilot API server."""
+"""
+Local dev entry point — run the API server without Docker.
+
+    cd src/cua_backend
+    python api_server.py
+
+In Docker, supervisord starts uvicorn directly (this file is not used).
+"""
 import sys
 from pathlib import Path
 

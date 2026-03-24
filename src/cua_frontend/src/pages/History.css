@@ -51,4 +51,36 @@
   font-size: var(--fs-sm);
 }
 
-.history-error { color: var(--red); }
+.history-error {
+  color: var(--red);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+@media (max-width: 768px) {
+  .history-page {
+    padding: 0;
+    gap: 14px;
+  }
+
+  .history-toolbar {
+    align-items: stretch;
+  }
+
+  .history-controls {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .history-search,
+  .history-sort {
+    width: 100%;
+  }
+
+  .history-empty,
+  .history-error {
+    padding: 22px 14px;
+  }
+}

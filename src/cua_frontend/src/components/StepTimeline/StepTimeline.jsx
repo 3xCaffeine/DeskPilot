@@ -37,6 +37,7 @@ export default function StepTimeline({ steps, selectedStep, onSelectStep }) {
         <div
           key={idx}
           className={`step-card animate-slide-up${selectedStep === step.step ? ' selected' : ''}${step.screenshot_available ? ' clickable' : ''}`}
+          style={{ '--step-index': idx }}
           onClick={() => step.screenshot_available && onSelectStep(step.step)}
         >
           <div className="step-num">{step.step ?? idx + 1}</div>

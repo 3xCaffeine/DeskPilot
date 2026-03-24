@@ -185,18 +185,33 @@ class DesktopController(Executor):
         wait(action.seconds)
     
     def _handle_browser_action(self, action: Action) -> ExecutionResult:
-        """Handle browser-specific actions via CDP."""
-        try:
-            # Allow nested event loops for browser actions
-            import nest_asyncio
-            nest_asyncio.apply()
-            result = asyncio.run(self._execute_browser_action(action))
-            return ExecutionResult(
-                ok=result.get("success", False),
-                error=result.get("error")
-            )
-        except Exception as e:
-            return ExecutionResult(ok=False, error=f"Browser action failed: {e}")
+        """Handle browser-specific actions via CDP.
+        
+        Retries once on stale connection (e.g. Chrome was restarted).
+        """
+        import nest_asyncio
+        nest_asyncio.apply()
+        
+        for attempt in range(2):
+            try:
+                result = asyncio.run(self._execute_browser_action(action))
+                if result.get("success"):
+                    return ExecutionResult(ok=True)
+                error = result.get("error", "")
+                # Stale connection — force reconnect on retry
+                if attempt == 0 and ("closed" in error or "disposed" in error):
+                    asyncio.run(self._disconnect_browser())
+                    continue
+                return ExecutionResult(ok=False, error=error)
+            except Exception as e:
+                if attempt == 0 and ("closed" in str(e) or "disposed" in str(e)):
+                    try:
+                        asyncio.run(self._disconnect_browser())
+                    except Exception:
+                        pass
+                    continue
+                return ExecutionResult(ok=False, error=f"Browser action failed: {e}")
+        return ExecutionResult(ok=False, error="Browser action failed after retry")
     
     async def _execute_browser_action(self, action: Action) -> dict:
         """Execute browser action async."""
@@ -216,10 +231,20 @@ class DesktopController(Executor):
         return {"success": False, "error": "Unknown browser action"}
     
     async def _ensure_browser_connected(self) -> bool:
-        """Ensure browser provider and controller are connected."""
-        if self._browser_controller:
-            return True
+        """Ensure browser provider and controller are connected.
         
+        Validates existing connections and reconnects if stale
+        (e.g. after Chrome was killed and reopened).
+        """
+        # Check if existing connection is still alive
+        if self._browser_controller and self._browser_provider:
+            try:
+                await self._browser_provider._page.title()
+                return True  # Page is alive
+            except Exception:
+                # Stale connection — tear down and reconnect
+                await self._disconnect_browser()
+
         try:
             from ..perception.browser_state import BrowserStateProvider
             from .browser_controller import BrowserController
@@ -232,6 +257,16 @@ class DesktopController(Executor):
             pass
         
         return False
+
+    async def _disconnect_browser(self):
+        """Tear down stale CDP connection so we can reconnect."""
+        try:
+            if self._browser_provider and self._browser_provider._playwright:
+                await self._browser_provider._playwright.stop()
+        except Exception:
+            pass
+        self._browser_provider = None
+        self._browser_controller = None
 
     # ─────────────────────────────────────────────────────────────
     # ACCESSIBILITY STATE READING (Phase 1)
@@ -403,10 +438,16 @@ class DesktopController(Executor):
             return None
     
     async def _get_browser_state_async(self):
-        """Get browser state async."""
+        """Get browser state async. Reconnects if connection is stale."""
         if not await self._ensure_browser_connected():
             return None
-        return await self._browser_provider.get_state()
+        state = await self._browser_provider.get_state()
+        if state is None:
+            # Possible stale connection — try once more
+            await self._disconnect_browser()
+            if await self._ensure_browser_connected():
+                state = await self._browser_provider.get_state()
+        return state
 
 
 # ─────────────────────────────────────────────────────────────

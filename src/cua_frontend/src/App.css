@@ -10,10 +10,60 @@
   margin-left: var(--sidebar-width);
   min-width: 0;
   overflow: hidden;
+  transition: margin-left 180ms ease;
 }
 
 .app-content {
   flex: 1;
   overflow-y: auto;
   padding: var(--page-pad);
+  animation: fadeSlideUp 150ms ease;
+}
+
+.api-error-state {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.api-error-card {
+  width: 100%;
+  max-width: 520px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.api-error-card h2 {
+  font-size: var(--fs-xl);
+}
+
+.api-error-card p {
+  color: var(--text-secondary);
+}
+
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(0, 0, 0, 0.45);
+  border: none;
+}
+
+@media (max-width: 1200px) {
+  .app-main {
+    margin-left: 64px;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-main {
+    margin-left: 0;
+  }
+
+  .app-content {
+    padding: 16px;
+  }
 }

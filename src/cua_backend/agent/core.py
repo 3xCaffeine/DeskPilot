@@ -34,12 +34,16 @@ class Agent:
         executor: DesktopController,
         vision_llm: Optional[LLMClient] = None,
         runs_dir: str = "runs",
+        on_step_callback=None,
+        cancel_check=None,
     ):
         self._planner = planner
         self._executor = executor
         self._vision = vision_llm
         self._runs_dir = Path(runs_dir)
-        self._history: List[str] = [] # Track actions and outcomes 
+        self._history: List[str] = [] # Track actions and outcomes
+        self._on_step = on_step_callback  # Optional: API event streaming
+        self._cancel_check = cancel_check  # Optional: raises _TaskCancelled if set
 
     def run(self, task: Task) -> TaskResult:
         """Execute task using state machine."""
@@ -55,7 +59,8 @@ class Agent:
 
         try:
             for step in range(1, task.max_steps + 1):
-                # === 1. OBSERVE & LOCAL VALIDATION (Save LLM call) ===
+                # Check cancel at the start of every step
+                if self._cancel_check: self._cancel_check()
                 screenshot = self._executor.screenshot()
                 ss_path = run_dir / f"step_{step:03d}.png"
                 screenshot.save(ss_path)
@@ -108,6 +113,19 @@ class Agent:
                         print(f"   {'✅' if result.ok else '❌'} Result: ok={result.ok}, error={result.error}")
                         action_str = f"{action.type}({getattr(action, 'key', getattr(action, 'text', ''))})"
                         self._record(state, step, action, result.ok, ss_path, result.error)
+
+                        # Emit event for API streaming
+                        if self._on_step:
+                            self._on_step({
+                                "event_type": "step",
+                                "step": step,
+                                "action_type": action.type,
+                                "action_detail": str(action),
+                                "result_ok": result.ok,
+                                "error": result.error,
+                                "screenshot_available": True,
+                                "timestamp": datetime.now().isoformat(),
+                            })
                         
                         # Immediate Success/Fail signal from AI
                         if isinstance(action, DoneAction):
@@ -174,6 +192,7 @@ class Agent:
                                 print(f"   ℹ️ Dialog detected ('{current_title}'). Waiting for target...")
                         
                         import time
+                        if self._cancel_check: self._cancel_check()
                         time.sleep(1)
                     
                     # If anchor still not found after polling, check if app launched but

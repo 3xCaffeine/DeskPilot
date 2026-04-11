@@ -1,0 +1,124 @@
+.task-input {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 720px;
+}
+
+.task-input-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.task-input-header h3 {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  letter-spacing: -0.2px;
+}
+
+.task-input-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.task-input-hint {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+/* Model select inside task input */
+.model-select {
+  width: auto;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--r-panel);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  padding: 3px 24px 3px 8px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color var(--t);
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath fill='%2371717a' d='M0 0l4 5 4-5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 7px center;
+}
+
+.model-select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.5);
+}
+
+.model-select option {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.task-textarea {
+  min-height: 120px;
+  font-size: var(--fs-base);
+}
+
+/* Footer */
+.task-input-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+/* Steps slider */
+.task-input-steps {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 140px;
+}
+
+.steps-label {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.steps-value {
+  color: var(--accent);
+  font-weight: 500;
+  font-family: var(--font-mono);
+  margin-left: 3px;
+}
+
+.steps-slider {
+  flex: 1;
+  appearance: none;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  outline: none;
+  cursor: pointer;
+}
+
+.steps-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+}
+
+/* Actions */
+.task-input-actions {
+  display: flex;
+  gap: 8px;
+}

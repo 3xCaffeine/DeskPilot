@@ -7,6 +7,7 @@ import argparse
 from cua_backend.agent import Agent, Planner
 from cua_backend.execution import DesktopController
 from cua_backend.schemas.tasks import Task
+from pathlib import Path
 
 def main():
     parser = argparse.ArgumentParser(description="DeskPilot CLI")
@@ -36,11 +37,13 @@ def main():
     controller = DesktopController()
     
     # 3. Create the Agent
+    root_dir = Path(__file__).resolve().parents[3]
+    
     agent = Agent(
         planner=planner,
         executor=controller,
         vision_llm=vision_client,
-        runs_dir="runs"
+        runs_dir=str(root_dir / "runs")
     )
 
     # 3. Create and Run Task
